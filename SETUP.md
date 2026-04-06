@@ -116,6 +116,79 @@ ANTHROPIC_API_KEY=your-anthropic-api-key-here
 
 Get an API key from [Anthropic Console](https://console.anthropic.com).
 
+## Production Deployment (Railway + Vercel)
+
+The production deployment uses Railway for the backend/database and Vercel for the frontend.
+
+### Deployed URLs
+
+- **Frontend**: `https://adaptiveai-frontend.vercel.app`
+- **Backend API**: `https://adaptiveai-backend-production.up.railway.app`
+- **Health Check**: `https://adaptiveai-backend-production.up.railway.app/healthz`
+
+### Railway Backend
+
+Railway project: `dazzling-rejoicing` (`633c28af-d005-40b9-a417-9a30646438ab`)
+
+Required environment variables:
+- `DATABASE_URL` — Railway Postgres internal connection string (use `${{Postgres.DATABASE_URL}}` reference)
+- `SESSION_SECRET` — Cryptographically random, minimum 64 characters (`openssl rand -hex 64`)
+- `NODE_ENV` — Must be `production`
+- `PORT` — `8080` (required by Railway)
+- `CORS_ALLOWED_ORIGINS` — `https://adaptiveai-frontend.vercel.app`
+
+Optional:
+- `ANTHROPIC_API_KEY` — For AI chat. Omit to gracefully disable AI features.
+
+Not set (intentionally):
+- `SEED_DATABASE` — Must remain unset in production. Seed only runs when `NODE_ENV !== 'production'` or `SEED_DATABASE === 'true'`.
+
+### Vercel Frontend
+
+Vercel project name: `adaptiveai-frontend`
+
+The `vercel.json` rewrites `/api/*` requests to the Railway backend. If the Railway domain changes, update the rewrite destination in `vercel.json` and redeploy.
+
+### Session Store
+
+Sessions are stored in the `user_sessions` table (PostgreSQL), managed by `connect-pg-simple`.
+
+- `tableName: "user_sessions"` — explicitly set in `server/auth.ts`
+- `createTableIfMissing: false` — the table must exist before first deploy (create via migration or manual DDL)
+
+If deploying to a fresh database, create the session table:
+```sql
+CREATE TABLE IF NOT EXISTS user_sessions (
+  sid VARCHAR NOT NULL PRIMARY KEY,
+  sess JSON NOT NULL,
+  expire TIMESTAMP(6) NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_user_sessions_expire ON user_sessions (expire);
+```
+
+### Admin Bootstrap
+
+The first admin user must be created via the registration endpoint and then promoted via SQL:
+```bash
+# Register
+curl -X POST https://<backend>/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"<secure>","displayName":"Admin User"}'
+
+# Promote to admin (new users get role "agent" by default)
+psql "$DATABASE_PUBLIC_URL" -c "UPDATE users SET role='admin' WHERE username='admin';"
+```
+
+### Database Migrations on Railway
+
+Migrations are in `supabase/migrations/` and can be applied via `psql` against the Railway Postgres public URL.
+
+**Railway compatibility note**: Migrations 2, 5, and 7 contain Supabase-specific statements that produce harmless errors on Railway Postgres:
+- `REVOKE ... FROM anon/authenticated` — these roles don't exist on Railway Postgres (no-op)
+- `CREATE POLICY IF NOT EXISTS ...` — standard PostgreSQL doesn't support `IF NOT EXISTS` on `CREATE POLICY`
+
+These errors are **non-blocking**. The app uses session-based auth via the `postgres` superuser role, not Supabase RLS roles. RLS policies created by migration 2 (using `USING (true)`) allow full access to the service role, which is the correct behavior.
+
 ## Troubleshooting
 
 ### Database Connection Errors

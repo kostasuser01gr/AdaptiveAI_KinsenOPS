@@ -17,7 +17,7 @@ This application uses **session-based authentication** managed at the applicatio
 
 All tables have RLS enabled to prevent unauthorized direct database access:
 
-- **Status**: ✅ Enabled on all 23 tables
+- **Status**: ✅ Enabled on all 28 tables
 - **Policy Model**: Service role bypass policies allow the application backend full access
 - **Direct Access**: Blocked for `anon` and `authenticated` roles
 - **Protection**: Sensitive data (passwords) cannot be accessed directly via API
@@ -169,7 +169,7 @@ The platform includes features to support GDPR compliance:
 
 ### Data Protection
 
-- Passwords hashed with bcrypt
+- Passwords hashed with scrypt (Node.js crypto, 64-byte key, timing-safe compare)
 - Session tokens stored securely in PostgreSQL
 - Sensitive data protected by RLS
 - No PII in logs (except audit logs)
@@ -206,7 +206,7 @@ The platform includes features to support GDPR compliance:
 - [x] Structured logging for observability
 - [x] WebSocket authentication
 - [x] Session-based authentication
-- [x] Password hashing with bcrypt
+- [x] Password hashing with scrypt
 - [x] Security headers (HSTS, X-Frame-Options, etc.)
 
 ## Incident Response
