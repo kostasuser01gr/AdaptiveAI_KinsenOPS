@@ -1,0 +1,68 @@
+name: Compliance Audit (Monthly)
+
+on:
+  schedule:
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  audit:
+    name: Monthly Compliance Verification
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      compliance_pass: ${{ steps.evaluate.outputs.pass }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: bash scripts/hardening/build-inventory.sh
+      - run: bash scripts/run-all-gates.sh
+      - run: bash scripts/ci/record-metrics.sh
+      - run: bash scripts/github-cli/generate-compliance-report.sh
+      - id: evaluate
+        run: |
+          python3 <<'PY'
+          import json
+          from pathlib import Path
+
+          ledger = json.loads(Path(".black-vault/ComplianceLedger.json").read_text())
+          latest = ledger[-1]
+          pass_state = latest["compliance_score"] == 100.0 and latest["findings"]["open"] == 0
+          output = Path(".github-compliance-output")
+          output.write_text("true" if pass_state else "false")
+          PY
+          echo "pass=$(cat .github-compliance-output)" >> "$GITHUB_OUTPUT"
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: compliance-audit-${{ github.run_id }}
+          path: |
+            artifacts/
+            coverage/
+            .black-vault/
+            BLACK_VAULT_HARDENING_REPORT.md
+          retention-days: 90
+      - if: steps.evaluate.outputs.pass == 'true'
+        run: |
+          gh release create "hardening-${{ github.run_id }}" \
+            BLACK_VAULT_HARDENING_REPORT.md \
+            .black-vault/ComplianceLedger.json \
+            --title "Black Vault Hardening Audit ${{ github.run_number }}" \
+            --notes "Automated compliance audit passed."
+      - if: always()
+        run: |
+          gh issue create \
+            --title "Monthly Compliance Audit - $(date -u +%Y-%m-%d)" \
+            --body "$(cat BLACK_VAULT_HARDENING_REPORT.md)" \
+            --label "compliance"

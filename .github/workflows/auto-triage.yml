@@ -1,0 +1,52 @@
+name: Auto-Triage Findings
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+  schedule:
+    - cron: "0 10 * * MON"
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    name: Apply severity labels
+    runs-on: ubuntu-latest
+    if: contains(join(github.event.issue.labels.*.name, ','), 'type:finding') || github.event_name == 'schedule'
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            async function processIssue(issue) {
+              const text = `${issue.title}\n${issue.body || ""}`.toUpperCase();
+              let label = "security:P2";
+              if (text.includes("P0") || text.includes("CRITICAL")) {
+                label = "security:P0";
+              } else if (text.includes("P1") || text.includes("HIGH")) {
+                label = "security:P1";
+              }
+
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: [label],
+              }).catch(() => {});
+            }
+
+            if (context.eventName === "schedule") {
+              const issues = await github.paginate(github.rest.issues.listForRepo, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: "open",
+                labels: "type:finding",
+                per_page: 100,
+              });
+              for (const issue of issues) {
+                await processIssue(issue);
+              }
+            } else {
+              await processIssue(context.payload.issue);
+            }

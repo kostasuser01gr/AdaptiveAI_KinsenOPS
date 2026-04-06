@@ -1,0 +1,180 @@
+name: Black Vault Gates (PR)
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+concurrency:
+  group: gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (G1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: bash scripts/ci/run-gates.sh G1
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-g1
+          path: artifacts/
+          retention-days: 30
+
+  lint:
+    name: Lint (G2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: bash scripts/ci/run-gates.sh G2
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lint-g2
+          path: artifacts/
+          retention-days: 30
+
+  typecheck:
+    name: Typecheck (G3)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: bash scripts/ci/run-gates.sh G3
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: typecheck-g3
+          path: artifacts/
+          retention-days: 30
+
+  test:
+    name: Test (G4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: bash scripts/ci/run-gates.sh G4
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-g4
+          path: artifacts/
+          retention-days: 30
+
+  coverage:
+    name: Coverage (G6)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: bash scripts/ci/run-gates.sh G6
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-g6
+          path: |
+            artifacts/
+            coverage/
+          retention-days: 30
+
+  audit:
+    name: Audit (G8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: bash scripts/ci/run-gates.sh G8
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: audit-g8
+          path: artifacts/
+          retention-days: 30
+
+  sast:
+    name: SAST (G9)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: bash scripts/ci/run-gates.sh G9
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sast-g9
+          path: artifacts/
+          retention-days: 30
+
+  secrets:
+    name: Secrets (G10)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - run: bash scripts/ci/run-gates.sh G10
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: secrets-g10
+          path: artifacts/
+          retention-days: 30
+
+  gate-summary:
+    name: Gate Summary
+    if: always()
+    needs: [build, lint, typecheck, test, coverage, audit, sast, secrets]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          echo "Build: ${{ needs.build.result }}"
+          echo "Lint: ${{ needs.lint.result }}"
+          echo "Typecheck: ${{ needs.typecheck.result }}"
+          echo "Test: ${{ needs.test.result }}"
+          echo "Coverage: ${{ needs.coverage.result }}"
+          echo "Audit: ${{ needs.audit.result }}"
+          echo "SAST: ${{ needs.sast.result }}"
+          echo "Secrets: ${{ needs.secrets.result }}"
+          if [[ "${{ needs.build.result }}" != "success" || \
+                "${{ needs.lint.result }}" != "success" || \
+                "${{ needs.typecheck.result }}" != "success" || \
+                "${{ needs.test.result }}" != "success" || \
+                "${{ needs.coverage.result }}" != "success" || \
+                "${{ needs.audit.result }}" != "success" || \
+                "${{ needs.sast.result }}" != "success" || \
+                "${{ needs.secrets.result }}" != "success" ]]; then
+            exit 1
+          fi
