@@ -18,6 +18,7 @@ vite.config.ts.*
 .vscode/settings.json
 .idea/
 .vercel
+supabase/.temp/
 coverage/
 artifacts/
 BLACK_VAULT_HARDENING_REPORT.md
