@@ -24,8 +24,9 @@ export function auditLog(options: AuditOptions) {
     }
 
     const originalJson = res.json.bind(res);
+    const originalEnd = res.end.bind(res);
 
-    res.json = function (data: unknown) {
+    const recordAudit = (data?: unknown) => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const user = req.user as Express.User | undefined;
         const entityId = req.params.id || (data && typeof data === 'object' && 'id' in data ? String((data as { id: unknown }).id) : undefined);
@@ -46,8 +47,18 @@ export function auditLog(options: AuditOptions) {
           console.error('Failed to create audit entry:', err);
         });
       }
+    };
 
+    res.json = function (data: unknown) {
+      recordAudit(data);
       return originalJson(data);
+    };
+
+    // Capture non-JSON responses (e.g. 204 from DELETE)
+    // @ts-expect-error -- overriding overloaded end() signature for audit capture
+    res.end = function (...args: Parameters<Response['end']>) {
+      recordAudit();
+      return originalEnd(...args);
     };
 
     next();

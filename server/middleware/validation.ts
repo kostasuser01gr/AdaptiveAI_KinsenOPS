@@ -36,8 +36,8 @@ export function validateRequest(schema: {
 
 export function sanitizeInput(input: string): string {
   return input
-    .replace(/<script[^>]*>.*?<\/script>/gi, '')
-    .replace(/<iframe[^>]*>.*?<\/iframe>/gi, '')
+    .replace(/<script[^>]*>.*?<\/script>/gis, '')
+    .replace(/<iframe[^>]*>.*?<\/iframe>/gis, '')
     .replace(/javascript:/gi, '')
     .replace(/on\w+\s*=/gi, '')
     .trim();

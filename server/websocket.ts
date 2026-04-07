@@ -141,7 +141,7 @@ class WebSocketManager {
 
     try {
       const result = await db.execute(
-        sql`SELECT sess FROM "session" WHERE sid = ${sessionId} AND expire > now()`
+        sql`SELECT sess FROM "user_sessions" WHERE sid = ${sessionId} AND expire > now()`
       );
       const rows = result.rows as Array<{ sess: unknown }>;
       if (rows.length === 0) return;

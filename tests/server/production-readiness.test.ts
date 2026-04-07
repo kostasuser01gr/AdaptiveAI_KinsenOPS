@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod/v4";
 import {
   insertSystemPolicySchema,
-  insertImportSchema,
   insertAuditLogSchema,
 } from "../../shared/schema.js";
 

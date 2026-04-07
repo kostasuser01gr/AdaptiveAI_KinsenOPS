@@ -32,8 +32,9 @@ export default function SettingsPage() {
     },
   });
 
+  const allPrefs = Array.isArray(prefs) ? prefs : [];
   const getPref = (category: string, key: string, fallback: any = null) => {
-    const p = prefs?.find((p: any) => p.category === category && p.key === key);
+    const p = allPrefs.find((p: any) => p.category === category && p.key === key);
     return p ? p.value : fallback;
   };
 

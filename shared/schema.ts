@@ -94,7 +94,7 @@ export type Vehicle = typeof vehicles.$inferSelect;
 // ─── VEHICLE EVIDENCE (photos, notes, damage) ───
 export const vehicleEvidence = pgTable("vehicle_evidence", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  vehicleId: integer("vehicle_id").notNull(),
+  vehicleId: integer("vehicle_id"),
   type: text("type").notNull(),
   url: text("url"),
   caption: text("caption"),

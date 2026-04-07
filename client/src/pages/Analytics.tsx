@@ -65,7 +65,7 @@ export default function AnalyticsPage() {
   const shifts = Array.isArray(shiftsData) ? shiftsData : [];
   const notifs = Array.isArray(notifsData) ? notifsData : [];
   const summary = (summaryData || {}) as Record<string, any>;
-  const trends = trendsData || [];
+  const trends = Array.isArray(trendsData) ? trendsData : [];
   const vByStatus = (summary.vehiclesByStatus || {}) as Record<string, number>;
   const wByStatus = (summary.washesByStatus || {}) as Record<string, number>;
   const nBySeverity = (summary.notifsBySeverity || {}) as Record<string, number>;

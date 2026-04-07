@@ -16,7 +16,7 @@ import {
   insertNotificationSchema, insertCustomActionSchema,
   insertMessageSchema, insertStationSchema, insertAutomationRuleSchema,
   insertAuditLogSchema, insertEntityRoomSchema, insertRoomMessageSchema,
-  insertWorkspaceMemorySchema, insertDigitalTwinSnapshotSchema,
+  insertWorkspaceMemorySchema,
   insertVehicleEvidenceSchema, insertShiftRequestSchema, insertUserPreferenceSchema,
   insertSystemPolicySchema, insertActivityFeedSchema, insertModuleRegistrySchema,
   insertWorkspaceConfigSchema, insertFileAttachmentSchema, insertImportSchema,
@@ -131,7 +131,7 @@ const userPatchSchema = z.object({
 }).strict();
 
 const shiftRequestReviewSchema = z.object({
-  status: z.string(),
+  status: z.enum(["approved", "rejected"]),
   note: z.string().optional(),
 }).strict();
 
@@ -487,7 +487,7 @@ Respond in ${user.language === 'el' ? 'Greek' : 'English'}.`;
 
         const finalMessage = await stream.finalMessage();
         res.write(`data: ${JSON.stringify({ type: "done", usage: finalMessage.usage })}\n\n`);
-      } catch (streamErr) {
+      } catch {
         res.write(`data: ${JSON.stringify({ type: "error", message: "AI stream failed" })}\n\n`);
       }
       res.end();
@@ -710,7 +710,10 @@ Respond in ${user.language === 'el' ? 'Greek' : 'English'}.`;
 
   // USERS
   app.get("/api/users", requireRole("admin", "supervisor"), async (_req, res, next) => {
-    try { res.json(await storage.getUsers()); } catch (e) { next(e); }
+    try {
+      const allUsers = await storage.getUsers();
+      res.json(allUsers.map(({ password: _, ...u }) => u));
+    } catch (e) { next(e); }
   });
   app.patch("/api/users/:id", requireRole("admin"), async (req, res, next) => {
     try {
@@ -1003,7 +1006,14 @@ Respond in ${user.language === 'el' ? 'Greek' : 'English'}.`;
 
   // FILE ATTACHMENTS
   app.get("/api/file-attachments", requireAuth, async (req, res, next) => {
-    try { res.json(await storage.getFileAttachments(req.query.entityType as string, req.query.entityId as string)); } catch (e) { next(e); }
+    try {
+      const entityType = req.query.entityType;
+      const entityId = req.query.entityId;
+      if (typeof entityType !== 'string' || typeof entityId !== 'string') {
+        return res.status(400).json({ message: "entityType and entityId query params required" });
+      }
+      res.json(await storage.getFileAttachments(entityType, entityId));
+    } catch (e) { next(e); }
   });
   app.post("/api/file-attachments", requireAuth, async (req, res, next) => {
     try {
@@ -1227,21 +1237,25 @@ Respond in ${user.language === 'el' ? 'Greek' : 'English'}.`;
   });
 
   // ─── FEEDBACK (week-1 stabilization) ───
-  app.post("/api/feedback", requireAuth, validateRequest({ body: insertFeedbackSchema }), async (req, res) => {
-    const user = req.user as Express.User;
-    const fb = await storage.createFeedback({
-      ...req.body,
-      userId: user.id,
-      role: user.role,
-      userAgent: req.headers['user-agent'] ?? null,
-    });
-    metricsCollector.recordFeedback();
-    res.status(201).json(fb);
+  app.post("/api/feedback", requireAuth, validateRequest({ body: insertFeedbackSchema }), async (req, res, next) => {
+    try {
+      const user = req.user as Express.User;
+      const fb = await storage.createFeedback({
+        ...req.body,
+        userId: user.id,
+        role: user.role,
+        userAgent: req.headers['user-agent'] ?? null,
+      });
+      metricsCollector.recordFeedback();
+      res.status(201).json(fb);
+    } catch (e) { next(e); }
   });
 
-  app.get("/api/feedback", requireRole("admin"), async (_req, res) => {
-    const list = await storage.getFeedback();
-    res.json(list);
+  app.get("/api/feedback", requireRole("admin"), async (_req, res, next) => {
+    try {
+      const list = await storage.getFeedback();
+      res.json(list);
+    } catch (e) { next(e); }
   });
 
   // ─── IMPORTS ───
@@ -1263,8 +1277,12 @@ Respond in ${user.language === 'el' ? 'Greek' : 'English'}.`;
   });
   app.get("/api/imports/:id", requireAuth, async (req, res, next) => {
     try {
+      const user = req.user as Express.User;
       const imp = await storage.getImport(Number(req.params.id));
       if (!imp) return res.status(404).json({ message: "Not found" });
+      if (imp.uploadedBy !== user.id && user.role !== 'admin') {
+        return res.status(403).json({ message: "Forbidden" });
+      }
       res.json(imp);
     } catch (e) { next(e); }
   });
@@ -1420,7 +1438,7 @@ Respond in ${user.language === 'el' ? 'Greek' : 'English'}.`;
       }).strict();
       const data = schema.parse(req.body);
       const record = await storage.createVehicleEvidence({
-        vehicleId: 0,
+        vehicleId: null,
         type: data.type,
         caption: data.caption,
         source: data.source,
@@ -1479,14 +1497,13 @@ Respond in ${user.language === 'el' ? 'Greek' : 'English'}.`;
       if (!room || !isPublicRoomType(room.entityType)) {
         return res.status(404).json({ message: "Not found" });
       }
-      const { content, role } = z.object({
+      const { content } = z.object({
         content: z.string().min(1).max(10000),
-        role: z.string().optional(),
       }).strict().parse(req.body);
       const msg = await storage.createRoomMessage({
         roomId: Number(req.params.id),
         content,
-        role: role || "user",
+        role: "customer",
         type: "message",
       });
       res.status(201).json(msg);

@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod/v4";
 
 // ─── Route-level validation logic tests ──────────────────────────────────────
 // These test the schema validation used in routes without hitting the DB.
@@ -221,7 +222,6 @@ describe("insertImportSchema", () => {
 
 describe("importPatchSchema (inline z.object)", () => {
   // Re-create the patch schema here since it's not exported from routes
-  const { z } = require("zod");
   const importPatchSchema = z.object({
     status: z.string().optional(),
     records: z.number().optional(),
@@ -275,7 +275,6 @@ describe("importPatchSchema (inline z.object)", () => {
 // ─── Chunk 3: Public room message validation ─────────────────────────────────
 
 describe("public room message validation", () => {
-  const { z } = require("zod");
   const roomMessageSchema = z.object({
     content: z.string().min(1).max(2000),
     role: z.string().optional(),
@@ -326,7 +325,6 @@ describe("public room message validation", () => {
 // ─── Chunk 3: Import process endpoint validation ─────────────────────────────
 
 describe("import process validation", () => {
-  const { z } = require("zod");
 
   it("insertImportSchema accepts valid import with uploading status", () => {
     const result = insertImportSchema.safeParse({
@@ -403,7 +401,6 @@ describe("import process validation", () => {
 // ─── Chunk 3: Public evidence endpoint validation ────────────────────────────
 
 describe("public evidence endpoint validation", () => {
-  const { z } = require("zod");
   const publicEvidenceSchema = z.object({
     reservationId: z.string().min(1).max(100),
     type: z.string().min(1).max(50),
@@ -481,7 +478,6 @@ describe("public evidence endpoint validation", () => {
 
 // ─── Notification Action Schema ────────────────────────────────────────────────
 describe("notificationActionSchema", () => {
-  const { z } = require("zod");
   const notificationActionSchema = z.object({
     metadata: z.record(z.string(), z.unknown()).optional(),
   }).strict();
@@ -516,7 +512,6 @@ describe("notificationActionSchema", () => {
 
 // ─── Analytics Summary Response Shape ──────────────────────────────────────────
 describe("analyticsSummaryResponseShape", () => {
-  const { z } = require("zod");
   const analyticsSummarySchema = z.object({
     vehiclesByStatus: z.record(z.string(), z.number()),
     totalVehicles: z.number(),

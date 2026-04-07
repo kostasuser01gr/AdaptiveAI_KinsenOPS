@@ -35,6 +35,7 @@ class StructuredLogger {
 
   debug(message: string, context?: LogContext): void {
     if (this.isDevelopment) {
+      // eslint-disable-next-line no-console
       console.debug(this.formatMessage('debug', message, context));
     }
   }
