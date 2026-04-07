@@ -74,7 +74,7 @@ export default function ShiftsPage() {
     },
   });
 
-  const rows = shifts || [];
+  const rows = Array.isArray(shifts) ? shifts : [];
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const draftCount = rows.filter(s => s.status === 'draft').length;
   const publishedCount = rows.filter(s => s.status === 'published').length;

@@ -177,11 +177,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // VEHICLES
   app.get("/api/vehicles", requireAuth, auditLog({ action: AUDIT_ACTIONS.VIEW, entityType: 'vehicle', skipCondition: () => true }), async (req, res, next) => {
     try {
-      const limit = Math.min(Number(req.query.limit) || 100, 500);
-      const offset = Number(req.query.offset) || 0;
       const vehicles = await storage.getVehicles();
-      const paginated = vehicles.slice(offset, offset + limit);
-      res.json({ data: paginated, total: vehicles.length, limit, offset });
+      res.json(vehicles);
     } catch (e) { next(e); }
   });
   app.post("/api/vehicles", requireAuth, auditLog({ action: AUDIT_ACTIONS.CREATE, entityType: 'vehicle' }), async (req, res, next) => {

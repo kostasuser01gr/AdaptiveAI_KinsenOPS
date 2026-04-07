@@ -47,7 +47,7 @@ export default function WashersPage() {
     },
   });
 
-  const items = queue || [];
+  const items = Array.isArray(queue) ? queue : [];
   const pending = items.filter(i => i.status === 'pending' || i.status === 'in_progress');
   const completed = items.filter(i => i.status === 'completed');
 

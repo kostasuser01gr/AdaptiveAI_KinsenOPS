@@ -99,7 +99,7 @@ export default function FleetPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }),
   });
 
-  const allVehicles = vehicles || [];
+  const allVehicles = Array.isArray(vehicles) ? vehicles : [];
   const filtered = allVehicles.filter(v => {
     const matchSearch = v.plate.toLowerCase().includes(search.toLowerCase()) || v.model.toLowerCase().includes(search.toLowerCase());
     const matchStatus = statusFilter === 'all' || v.status === statusFilter;

@@ -85,7 +85,7 @@ export default function OpsInboxPage() {
     },
   });
 
-  const items = notifications || [];
+  const items = Array.isArray(notifications) ? notifications : [];
   const unreadCount = items.filter(n => !n.read).length;
   const criticalCount = items.filter(n => n.severity === 'critical').length;
 

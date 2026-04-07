@@ -61,8 +61,9 @@ export default function ProposalsPage() {
     queryKey: ['/api/proposals', statusFilter !== 'all' ? statusFilter : undefined],
     queryFn: getQueryFn({ on401: 'throw' }),
     select: (data: Proposal[]) => {
-      if (statusFilter === 'all') return data;
-      return data.filter(p => p.status === statusFilter);
+      const arr = Array.isArray(data) ? data : [];
+      if (statusFilter === 'all') return arr;
+      return arr.filter(p => p.status === statusFilter);
     },
   });
 
