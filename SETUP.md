@@ -184,10 +184,10 @@ psql "$DATABASE_PUBLIC_URL" -c "UPDATE users SET role='admin' WHERE username='ad
 Migrations are in `supabase/migrations/` and can be applied via `psql` against the Railway Postgres public URL.
 
 **Railway compatibility note**: Migrations 2, 5, and 7 contain Supabase-specific statements that produce harmless errors on Railway Postgres:
-- `REVOKE ... FROM anon/authenticated` — these roles don't exist on Railway Postgres (no-op)
+- `REVOKE ... FROM anon/authenticated` — these roles don't exist on Railway Postgres (no-op, harmless)
 - `CREATE POLICY IF NOT EXISTS ...` — standard PostgreSQL doesn't support `IF NOT EXISTS` on `CREATE POLICY`
 
-These errors are **non-blocking**. The app uses session-based auth via the `postgres` superuser role, not Supabase RLS roles. RLS policies created by migration 2 (using `USING (true)`) allow full access to the service role, which is the correct behavior.
+Migration 006 (`20260407_006_railway_rls_fix.sql`) corrects the missing policies from migration 5 using standard PostgreSQL syntax. Always apply all migrations including 006 on Railway deployments.
 
 ## Troubleshooting
 
@@ -326,10 +326,12 @@ Migrations live in `supabase/migrations/` and are numbered sequentially:
 | 002 | `20260324160235_002_add_foreign_key_indexes_and_rls.sql` | FK indexes + RLS on all core tables |
 | 003 | `20260405000000_003_add_imports_table.sql` | imports table for data pipeline |
 | 003b | `20260405_003_notifications_reads_and_recipients.sql` | Notification targeting + per-user reads |
-| 004 | `20260406_004_workspace_proposals.sql` | Workspace proposals |
+| 004a | `20260405100000_004_add_feedback_table.sql` | Feedback table + RLS policies |
+| 004b | `20260406_004_workspace_proposals.sql` | Workspace proposals |
 | 005 | `20260407_005_production_hardening.sql` | RLS for proposals/imports/reads, audit index |
+| 006 | `20260407_006_railway_rls_fix.sql` | Fix missing RLS policies from 005 on Railway |
 
-All migrations use `CREATE IF NOT EXISTS` / `ALTER ... IF NOT EXISTS` and are safe to re-run.
+Migrations are idempotent where possible. Migration 006 uses `DROP POLICY IF EXISTS` + `CREATE POLICY` for safe re-runs.
 
 ### Applying migrations
 
