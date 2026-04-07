@@ -109,7 +109,7 @@
     "@vitest/coverage-v8": "^4.1.0",
     "@vitest/ui": "^4.1.0",
     "autoprefixer": "^10.4.21",
-    "drizzle-kit": "^0.31.4",
+    "drizzle-kit": "^0.31.10",
     "esbuild": "^0.25.0",
     "eslint": "^10.0.3",
     "eslint-plugin-security": "^4.0.0",
