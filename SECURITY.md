@@ -15,7 +15,7 @@ This application uses **session-based authentication** managed at the applicatio
 
 ### Row Level Security (RLS)
 
-All tables have RLS enabled to prevent unauthorized direct database access:
+RLS is enabled on original schema tables to prevent unauthorized direct database access:
 
 - **Status**: ✅ Enabled on 28 of 52 tables (original schema tables). 24 tables added in Phase 3–4 use application-layer workspace isolation via `workspaceId` scoping.
 - **Policy Model**: Service role bypass policies allow the application backend full access
@@ -76,9 +76,11 @@ Multiple rate limiters protect against abuse:
 | Auth | 15 min | 20 | Prevent brute force |
 | API | 1 min | 100 | General API protection |
 | AI Chat | 1 min | 10 | Prevent AI abuse |
-| Search | 1 min | 30 | Limit search queries || Wash Queue Read | 1 min | 60 | Kiosk tablet polling |
+| Search | 1 min | 30 | Limit search queries |
+| Wash Queue Read | 1 min | 60 | Kiosk tablet polling |
 | Wash Queue Write | 1 min | 10 | Kiosk tablet submissions |
-| Evidence Upload | 1 min | 5 | Limit evidence uploads || Webhooks | 1 min | 30 | Limit webhook ingestion |
+| Evidence Upload | 1 min | 5 | Limit evidence uploads |
+| Webhooks | 1 min | 30 | Limit webhook ingestion |
 
 Rate limiting uses user ID for authenticated requests and IP address for anonymous requests.
 
