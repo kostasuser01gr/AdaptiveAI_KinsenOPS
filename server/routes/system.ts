@@ -120,7 +120,7 @@ export function registerSystemRoutes(app: Express) {
       try { await client.query("SELECT 1"); dbOk = true; } finally { client.release(); }
     } catch { /* db unreachable */ }
 
-    const status = dbOk ? (metrics.errorRate > 0.5 ? 'degraded' : 'operational') : 'degraded';
+    const status = dbOk ? (metrics.errorRate > 50 ? 'degraded' : 'operational') : 'degraded';
 
     res.json({
       status,
