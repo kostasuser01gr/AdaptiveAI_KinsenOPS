@@ -134,10 +134,18 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  process.stdout.write("[BOOT] starting async init\n");
   // Initialize WebSocket server
   wsManager.initialize(httpServer);
 
-  await registerRoutes(httpServer, app);
+  process.stdout.write("[BOOT] ws init done, calling registerRoutes\n");
+  try {
+    await registerRoutes(httpServer, app);
+  } catch (routeErr: any) {
+    process.stdout.write("[BOOT] registerRoutes FAILED: " + (routeErr?.stack || routeErr?.message || String(routeErr)) + "\n");
+    throw routeErr;
+  }
+  process.stdout.write("[BOOT] registerRoutes done\n");
 
   // Only seed in development or when explicitly requested
   if (process.env.NODE_ENV !== "production" || process.env.SEED_DATABASE === "true") {
