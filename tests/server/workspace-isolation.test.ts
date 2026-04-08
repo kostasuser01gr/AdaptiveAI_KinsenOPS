@@ -436,11 +436,12 @@ describe("Webhook workspace resolution (hardening audit B)", () => {
     const content = fs.readFileSync("server/routes/telematics.ts", "utf8");
     const webhookSection = content.slice(
       content.indexOf("/api/webhooks/telematics"),
-      content.indexOf("/api/webhooks/telematics") + 800,
+      content.indexOf("/api/webhooks/telematics") + 1200,
     );
     expect(webhookSection).toContain("getIntegrationConnectorsUnscoped");
     expect(webhookSection).toContain("runWithWorkspace");
     expect(webhookSection).not.toContain("getIntegrationConnectors(");
+    expect(webhookSection).toContain("timingSafeEqual");
   });
 });
 
@@ -493,9 +494,10 @@ describe("Deploy-prep: storage wsFilter regression guards", () => {
   it("workshop webhook uses getIntegrationConnectorsUnscoped + runWithWorkspace", async () => {
     const fs = await import("fs");
     const src = fs.readFileSync("server/routes/workshop.ts", "utf8");
-    const section = src.slice(src.indexOf("/api/webhooks/workshop"), src.indexOf("/api/webhooks/workshop") + 800);
+    const section = src.slice(src.indexOf("/api/webhooks/workshop"), src.indexOf("/api/webhooks/workshop") + 1200);
     expect(section).toContain("getIntegrationConnectorsUnscoped");
     expect(section).toContain("runWithWorkspace");
+    expect(section).toContain("timingSafeEqual");
   });
 
   it("graceful shutdown calls httpServer.close and process.exit", async () => {

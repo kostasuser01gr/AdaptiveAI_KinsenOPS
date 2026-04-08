@@ -69,3 +69,11 @@ export const publicEvidenceLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+export const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { message: "Too many webhook requests, please slow down" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

@@ -17,7 +17,7 @@ This application uses **session-based authentication** managed at the applicatio
 
 All tables have RLS enabled to prevent unauthorized direct database access:
 
-- **Status**: ✅ Enabled on all 28 tables
+- **Status**: ✅ Enabled on 28 of 52 tables (original schema tables). 24 tables added in Phase 3–4 use application-layer workspace isolation via `workspaceId` scoping.
 - **Policy Model**: Service role bypass policies allow the application backend full access
 - **Direct Access**: Blocked for `anon` and `authenticated` roles
 - **Protection**: Sensitive data (passwords) cannot be accessed directly via API
@@ -26,7 +26,7 @@ All tables have RLS enabled to prevent unauthorized direct database access:
 
 All foreign key relationships are properly indexed for optimal query performance:
 
-- **Total Indexes**: 35 indexes covering all foreign keys and frequently queried columns
+- **Total Indexes**: 192 indexes covering all foreign keys and frequently queried columns
 - **Performance**: Optimized JOIN operations across all table relationships
 - **Coverage**: 100% of foreign key columns have covering indexes
 
@@ -77,6 +77,7 @@ Multiple rate limiters protect against abuse:
 | API | 1 min | 100 | General API protection |
 | AI Chat | 1 min | 10 | Prevent AI abuse |
 | Search | 1 min | 30 | Limit search queries |
+| Webhooks | 1 min | 30 | Limit webhook ingestion |
 
 Rate limiting uses user ID for authenticated requests and IP address for anonymous requests.
 

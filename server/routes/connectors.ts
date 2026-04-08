@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { z } from "zod/v4";
+import { timingSafeEqual } from "crypto";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
@@ -9,6 +10,7 @@ import { redactConnectorConfig } from "./_helpers.js";
 import { recordUsage, checkUsageCeiling } from "../metering/service.js";
 import { insertIntegrationConnectorSchema } from "../../shared/schema.js";
 import { runWithWorkspace } from "../middleware/workspaceContext.js";
+import { webhookLimiter } from "../middleware/rate-limiter.js";
 
 export function registerConnectorRoutes(app: Express) {
   const connectorPatchSchema = z.object({
@@ -253,7 +255,7 @@ export function registerConnectorRoutes(app: Express) {
   });
 
   // WEBHOOK INGEST
-  app.post("/api/webhooks/reservations", async (req, res, next) => {
+  app.post("/api/webhooks/reservations", webhookLimiter, async (req, res, next) => {
     try {
       const webhookSchema = z.object({
         connectorToken: z.string().min(1),
@@ -264,7 +266,9 @@ export function registerConnectorRoutes(app: Express) {
       const allConnectors = await storage.getIntegrationConnectorsUnscoped('webhook');
       const connector = allConnectors.find(c => {
         const cfg = c.config as Record<string, unknown>;
-        return cfg.webhookToken === connectorToken;
+        const stored = String(cfg.webhookToken ?? "");
+        if (stored.length !== connectorToken.length) return false;
+        return timingSafeEqual(Buffer.from(stored), Buffer.from(connectorToken));
       });
       if (!connector) return res.status(401).json({ message: "Invalid connector token" });
       if (connector.status !== 'active') return res.status(409).json({ message: "Connector is not active" });
