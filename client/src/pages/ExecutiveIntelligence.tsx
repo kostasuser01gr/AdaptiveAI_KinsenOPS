@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, TrendingUp, TrendingDown, Activity, AlertTriangle, Users, Car, Droplets, ArrowRight, Download, Star, Zap } from 'lucide-react';
+import { useEntitlements } from "@/lib/useEntitlements";
+import { LockedFeature, LockedSection } from "@/components/LockedFeature";
 
 function InsightCard({ title, value, change, changeLabel, icon: Icon, color, action, confidence }: any) {
   const isPositive = change > 0;
@@ -37,23 +39,35 @@ function InsightCard({ title, value, change, changeLabel, icon: Icon, color, act
 }
 
 export default function ExecutiveIntelligencePage() {
+  const { hasFeature } = useEntitlements();
+  const briefingsEnabled = hasFeature("executive_briefings");
   const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
   const { data: washData } = useQuery({ queryKey: ["/api/wash-queue"] });
   const { data: notifData } = useQuery({ queryKey: ["/api/notifications"] });
   const { data: summaryData } = useQuery({ queryKey: ["/api/analytics/summary"] });
+  const { data: kpiData } = useQuery<{ kpis: Record<string, { value: number; unit: string }> }>({
+    queryKey: ["/api/kpi/compute"],
+    queryFn: () => fetch('/api/kpi/compute', { credentials: 'include' }).then(r => r.json()),
+    enabled: hasFeature("kpi_snapshots"),
+  });
+  const { data: anomaliesData } = useQuery({ queryKey: ["/api/anomalies"], enabled: hasFeature("anomaly_detection") });
+  const { data: briefingsData } = useQuery({ queryKey: ["/api/executive-briefings"], enabled: briefingsEnabled });
   const { data: trendsData } = useQuery<{ date: string; washes: number; evidence: number; notifications: number }[]>({ queryKey: ["/api/analytics/trends", 30], queryFn: () => fetch("/api/analytics/trends?days=30", { credentials: 'include' }).then(r => r.json()) });
 
   const vehicles = Array.isArray(vehiclesData) ? vehiclesData : [];
   const washes = Array.isArray(washData) ? washData : [];
   const notifs = Array.isArray(notifData) ? notifData : [];
   const summary = (summaryData || {}) as Record<string, any>;
+  const kpis = kpiData?.kpis || {};
+  const anomalies = Array.isArray(anomaliesData) ? anomaliesData : [];
+  const briefings = Array.isArray(briefingsData) ? briefingsData : [];
 
   const totalVehicles = summary.totalVehicles ?? vehicles.length;
   const readyCount = summary.vehiclesByStatus?.ready ?? vehicles.filter(v => v.status === 'ready').length;
   const washingCount = summary.vehiclesByStatus?.washing ?? 0;
   const rentedCount = summary.vehiclesByStatus?.rented ?? 0;
   const maintenanceCount = summary.vehiclesByStatus?.maintenance ?? 0;
-  const fleetUtil = summary.fleetUtilization ?? (totalVehicles > 0 ? Math.round(((rentedCount + washingCount) / totalVehicles) * 100) : 0);
+  const fleetUtil = kpis.fleet_utilization?.value ?? summary.fleetUtilization ?? (totalVehicles > 0 ? Math.round(((rentedCount + washingCount) / totalVehicles) * 100) : 0);
   const washesToday = summary.washesCompletedToday ?? 0;
   const pendingWashes = summary.washesByStatus?.pending ?? 0;
   const completedWashes = summary.washesByStatus?.completed ?? 0;
@@ -73,6 +87,40 @@ export default function ExecutiveIntelligencePage() {
   const avgDailyWashes = trends.length > 0 ? Math.round(trends.reduce((s, t) => s + t.washes, 0) / trends.length * 10) / 10 : 0;
   const avgDailyNotifs = trends.length > 0 ? Math.round(trends.reduce((s, t) => s + t.notifications, 0) / trends.length * 10) / 10 : 0;
 
+  const washerStats = React.useMemo(() => {
+    const byAssignee: Record<string, { total: number; completed: number }> = {};
+    washes.forEach((w: any) => {
+      const name = w.assignedTo;
+      if (!name) return;
+      if (!byAssignee[name]) byAssignee[name] = { total: 0, completed: 0 };
+      byAssignee[name].total++;
+      if (w.status === 'completed') byAssignee[name].completed++;
+    });
+    return Object.entries(byAssignee)
+      .map(([name, stats]) => ({
+        name,
+        prod: stats.total,
+        quality: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
+      }))
+      .sort((a, b) => b.prod - a.prod)
+      .slice(0, 5);
+  }, [washes]);
+
+  const weeklyForecast = React.useMemo(() => {
+    if (trends.length === 0) return [];
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const byDay: Record<number, number[]> = {};
+    trends.forEach(t => {
+      const dow = new Date(t.date).getDay();
+      if (!byDay[dow]) byDay[dow] = [];
+      byDay[dow].push(t.washes);
+    });
+    return [1, 2, 3, 4, 5, 6, 0].map(dow => ({
+      day: dayNames[dow],
+      demand: byDay[dow] ? Math.round(byDay[dow].reduce((s, v) => s + v, 0) / byDay[dow].length) : 0,
+    }));
+  }, [trends]);
+
   const handleExport = () => {
     const link = document.createElement('a');
     link.href = '/api/analytics/export?days=30';
@@ -90,8 +138,12 @@ export default function ExecutiveIntelligencePage() {
           <p className="text-sm text-muted-foreground">Weekly briefs, operational risks, AI insights, and business health</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleExport} data-testid="button-export"><Download className="h-3 w-3" /> Export</Button>
-          <Button variant="outline" size="sm" data-testid="button-schedule-brief">Schedule Brief</Button>
+          <LockedFeature locked={!hasFeature("exports")}>
+            <Button variant="outline" size="sm" className="gap-1" onClick={handleExport} data-testid="button-export"><Download className="h-3 w-3" /> Export</Button>
+          </LockedFeature>
+          <LockedFeature locked={!briefingsEnabled}>
+            <Button variant="outline" size="sm" data-testid="button-schedule-brief">Schedule Brief</Button>
+          </LockedFeature>
         </div>
       </div>
 
@@ -237,38 +289,31 @@ export default function ExecutiveIntelligencePage() {
                   </CardContent>
                 </Card>
                 <Card className="glass-card">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Recurring Issue Frequency</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Detected Anomalies</CardTitle></CardHeader>
                   <CardContent className="space-y-3">
-                    {[
-                      { issue: "Afternoon understaffing", freq: 12, trend: "rising" },
-                      { issue: "Cat B unavailability", freq: 8, trend: "stable" },
-                      { issue: "Late customer returns", freq: 6, trend: "rising" },
-                      { issue: "Wash re-work needed", freq: 3, trend: "falling" },
-                    ].map((item, i) => (
+                    {anomalies.filter((a: any) => a.status === 'open').length > 0 ? anomalies.filter((a: any) => a.status === 'open').slice(0, 5).map((a: any, i: number) => (
                       <div key={i} className="flex items-center justify-between p-2 rounded bg-muted/20">
-                        <span className="text-xs">{item.issue}</span>
+                        <span className="text-xs">{a.title}</span>
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="text-[9px]">{item.freq}x/month</Badge>
-                          <Badge className={`text-[9px] ${item.trend === 'rising' ? 'bg-red-500/20 text-red-400' : item.trend === 'falling' ? 'bg-green-500/20 text-green-400' : 'bg-muted text-muted-foreground'}`}>{item.trend}</Badge>
+                          <Badge variant="outline" className="text-[9px]">{a.type}</Badge>
+                          <Badge className={`text-[9px] ${a.severity === 'critical' ? 'bg-red-500/20 text-red-400' : a.severity === 'warning' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-muted text-muted-foreground'}`}>{a.severity}</Badge>
                         </div>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No open anomalies detected</p>
+                    )}
                   </CardContent>
                 </Card>
                 <Card className="glass-card">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Productivity vs Quality</CardTitle></CardHeader>
                   <CardContent className="space-y-3">
-                    {[
-                      { name: "Nikos", prod: 12, quality: 95 },
-                      { name: "Costas", prod: 9, quality: 88 },
-                      { name: "Dimitris", prod: 7, quality: 92 },
-                    ].map((w, i) => (
+                    {washerStats.length > 0 ? washerStats.map((w, i) => (
                       <div key={i} className="flex items-center gap-3 p-2 rounded bg-muted/20">
-                        <span className="text-xs w-16">{w.name}</span>
+                        <span className="text-xs w-16 truncate">{w.name}</span>
                         <div className="flex-1 space-y-1">
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] text-muted-foreground w-10">Speed</span>
-                            <div className="flex-1 h-2 bg-muted/30 rounded-full"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${(w.prod / 15) * 100}%` }} /></div>
+                            <div className="flex-1 h-2 bg-muted/30 rounded-full"><div className="h-full bg-blue-500 rounded-full" style={{ width: `${(w.prod / Math.max(...washerStats.map(s => s.prod), 1)) * 100}%` }} /></div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[9px] text-muted-foreground w-10">Quality</span>
@@ -276,7 +321,9 @@ export default function ExecutiveIntelligencePage() {
                           </div>
                         </div>
                       </div>
-                    ))}
+                    )) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No wash data with assigned operators</p>
+                    )}
                   </CardContent>
                 </Card>
               </div>
@@ -287,45 +334,44 @@ export default function ExecutiveIntelligencePage() {
                 <Card className="glass-card">
                   <CardHeader className="pb-2"><CardTitle className="text-sm">Weekly Demand Forecast</CardTitle></CardHeader>
                   <CardContent>
-                    <div className="flex items-end gap-1.5 h-36">
-                      {[
-                        { day: "Mon", demand: 18 }, { day: "Tue", demand: 22 },
-                        { day: "Wed", demand: 15 }, { day: "Thu", demand: 25 },
-                        { day: "Fri", demand: 30 }, { day: "Sat", demand: 12 },
-                        { day: "Sun", demand: 8 },
-                      ].map((d, i) => (
-                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                          <span className="text-[9px] font-bold">{d.demand}</span>
-                          <div className="w-full bg-muted/30 rounded-t relative" style={{ height: '100%' }}>
-                            <div className="absolute bottom-0 w-full bg-primary/70 rounded-t" style={{ height: `${(d.demand / 30) * 100}%` }} />
-                          </div>
-                          <span className="text-[9px] text-muted-foreground">{d.day}</span>
+                    {weeklyForecast.length > 0 ? (
+                      <>
+                        <div className="flex items-end gap-1.5 h-36">
+                          {weeklyForecast.map((d, i) => {
+                            const maxDemand = Math.max(...weeklyForecast.map(f => f.demand), 1);
+                            return (
+                              <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                                <span className="text-[9px] font-bold">{d.demand}</span>
+                                <div className="w-full bg-muted/30 rounded-t relative" style={{ height: '100%' }}>
+                                  <div className="absolute bottom-0 w-full bg-primary/70 rounded-t" style={{ height: `${(d.demand / maxDemand) * 100}%` }} />
+                                </div>
+                                <span className="text-[9px] text-muted-foreground">{d.day}</span>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-muted-foreground text-center mt-2">Predicted vehicle movements per day</p>
+                        <p className="text-[10px] text-muted-foreground text-center mt-2">Average vehicle movements per day (from 30-day trends)</p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-6">No trend data available for forecast</p>
+                    )}
                   </CardContent>
                 </Card>
                 <Card className="glass-card">
-                  <CardHeader className="pb-2"><CardTitle className="text-sm">Staffing Pressure Forecast</CardTitle></CardHeader>
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Latest Briefing Recommendations</CardTitle></CardHeader>
                   <CardContent className="space-y-3">
-                    {[
-                      { day: "Monday", gap: 0, label: "Covered" },
-                      { day: "Tuesday", gap: -1, label: "1 short" },
-                      { day: "Wednesday", gap: 0, label: "Covered" },
-                      { day: "Thursday", gap: -2, label: "2 short" },
-                      { day: "Friday", gap: -3, label: "Critical" },
-                      { day: "Saturday", gap: 0, label: "Covered" },
-                      { day: "Sunday", gap: 1, label: "Surplus" },
-                    ].map((d, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <span className="text-xs w-20 text-muted-foreground">{d.day}</span>
-                        <div className="flex-1 h-4 bg-muted/30 rounded-full overflow-hidden relative flex items-center justify-center">
-                          <div className={`absolute left-0 h-full rounded-full ${d.gap >= 0 ? 'bg-green-500/60' : d.gap >= -1 ? 'bg-yellow-500/60' : 'bg-red-500/60'}`} style={{ width: `${Math.max(20, 100 + d.gap * 20)}%` }} />
+                    {briefings.length > 0 ? (() => {
+                      const latest = briefings[0] as any;
+                      const recs: string[] = Array.isArray(latest.recommendations) ? latest.recommendations : [];
+                      return recs.length > 0 ? recs.map((rec: string, i: number) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <span className="text-xs w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center font-bold text-primary">{i + 1}</span>
+                          <span className="text-xs text-muted-foreground flex-1">{rec}</span>
                         </div>
-                        <span className={`text-xs font-bold w-16 text-right ${d.gap >= 0 ? 'text-green-400' : d.gap >= -1 ? 'text-yellow-400' : 'text-red-400'}`}>{d.label}</span>
-                      </div>
-                    ))}
+                      )) : <p className="text-sm text-muted-foreground text-center py-4">No recommendations in latest briefing</p>;
+                    })() : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No executive briefings generated yet. Use the Schedule Brief button to generate one.</p>
+                    )}
                   </CardContent>
                 </Card>
               </div>

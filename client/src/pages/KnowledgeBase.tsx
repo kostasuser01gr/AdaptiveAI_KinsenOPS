@@ -7,9 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Database, FileText, UploadCloud, RefreshCw, BookOpen, Search, Brain, MessageSquare, Sparkles, Shield, Clock, CheckCircle2 } from 'lucide-react';
 import { Input } from "@/components/ui/input";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { LockedFeature } from "@/components/LockedFeature";
 
 export default function KnowledgeBasePage() {
   const { data: memories } = useQuery({ queryKey: ["/api/workspace-memory"] });
+  const { hasFeature } = useEntitlements();
   const allMemories = Array.isArray(memories) ? memories : [];
   const [searchTerm, setSearchTerm] = React.useState('');
   const [askQuery, setAskQuery] = React.useState('');
@@ -65,7 +68,9 @@ export default function KnowledgeBasePage() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="gap-1" data-testid="button-sync"><RefreshCw className="h-3 w-3" /> Sync</Button>
-          <Button size="sm" className="gap-2" data-testid="button-upload"><UploadCloud className="h-4 w-4" /> Upload</Button>
+          <LockedFeature locked={!hasFeature("knowledge_ingestion")}>
+            <Button size="sm" className="gap-2" data-testid="button-upload"><UploadCloud className="h-4 w-4" /> Upload</Button>
+          </LockedFeature>
         </div>
       </div>
 

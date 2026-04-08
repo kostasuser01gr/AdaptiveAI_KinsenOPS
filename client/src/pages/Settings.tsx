@@ -22,6 +22,8 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
 
   const { data: prefs } = useQuery<any[]>({ queryKey: ["/api/user-preferences"] });
+  const { data: memoryData } = useQuery<any[]>({ queryKey: ["/api/workspace-memory"] });
+  const memories = Array.isArray(memoryData) ? memoryData : [];
   const savePref = useMutation({
     mutationFn: async (data: { category: string; key: string; value: any }) => {
       await apiRequest("POST", "/api/user-preferences", { ...data, scope: "personal" });
@@ -287,6 +289,119 @@ export default function SettingsPage() {
                       <p className="text-xs text-muted-foreground flex items-center gap-1">
                         <ShieldCheck className="h-3 w-3" /> Logged in as <span className="font-semibold">{user?.displayName}</span> ({user?.role})
                       </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* API Keys Tab */}
+              <TabsContent value="keys" className="m-0 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>API Keys</CardTitle>
+                    <CardDescription>Manage API keys for third-party integrations.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/20">
+                      <Key className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">No API keys configured</p>
+                        <p className="text-xs text-muted-foreground">API key management will be available when external integrations are enabled for your workspace.</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Memory Tab */}
+              <TabsContent value="memory" className="m-0 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Workspace Memory</CardTitle>
+                    <CardDescription>Knowledge the AI assistant has learned about your workspace operations.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {memories.length > 0 ? (
+                      <>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                          <Brain className="h-4 w-4" />
+                          <span>{memories.length} knowledge entries stored</span>
+                        </div>
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {memories.slice(0, 50).map((m: any) => (
+                            <div key={m.id} className="flex items-start gap-3 p-3 border rounded-lg bg-muted/20">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <Badge variant="outline" className="text-[10px]">{m.category}</Badge>
+                                  <span className="text-xs font-medium truncate">{m.key}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground truncate">{m.value}</p>
+                              </div>
+                              <span className="text-[10px] text-muted-foreground whitespace-nowrap">{new Date(m.updatedAt).toLocaleDateString()}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/20">
+                        <Brain className="h-5 w-5 text-muted-foreground" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">No workspace memories yet</p>
+                          <p className="text-xs text-muted-foreground">The AI assistant will build workspace memory as it learns about your operations through conversations.</p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Notifications Tab */}
+              <TabsContent value="notifications" className="m-0 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Notification Preferences</CardTitle>
+                    <CardDescription>Configure how and when you receive notifications.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Critical Alerts</Label>
+                        <p className="text-xs text-muted-foreground">Always receive critical severity notifications immediately.</p>
+                      </div>
+                      <Switch
+                        checked={getPref('notifications', 'critical_alerts', true)}
+                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'critical_alerts', value: checked })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Queue Updates</Label>
+                        <p className="text-xs text-muted-foreground">Notify when wash queue status changes.</p>
+                      </div>
+                      <Switch
+                        checked={getPref('notifications', 'queue_updates', true)}
+                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'queue_updates', value: checked })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Shift Reminders</Label>
+                        <p className="text-xs text-muted-foreground">Receive reminders about upcoming shift changes.</p>
+                      </div>
+                      <Switch
+                        checked={getPref('notifications', 'shift_reminders', true)}
+                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'shift_reminders', value: checked })}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm font-medium">Email Digest</Label>
+                        <p className="text-xs text-muted-foreground">Receive a daily summary of notifications via email.</p>
+                      </div>
+                      <Switch
+                        checked={getPref('notifications', 'email_digest', false)}
+                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'email_digest', value: checked })}
+                      />
                     </div>
                   </CardContent>
                 </Card>

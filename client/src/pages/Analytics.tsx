@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, TrendingUp, TrendingDown, Activity, Car, Droplets, Users, Clock, Zap, AlertTriangle, Brain, Download, ArrowRight, Target, Shield } from 'lucide-react';
 import { useAuth } from "@/lib/useAuth";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { LockedFeature } from "@/components/LockedFeature";
 
 function MiniBar({ label, value, max, color = "bg-primary" }: { label: string; value: number; max: number; color?: string }) {
   const pct = Math.min((value / max) * 100, 100);
@@ -48,6 +50,7 @@ function StatCard({ title, value, subtitle, icon: Icon, color = "text-primary", 
 
 export default function AnalyticsPage() {
   const { user } = useAuth();
+  const { hasFeature } = useEntitlements();
   const [trendDays, setTrendDays] = React.useState(30);
 
   const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
@@ -55,6 +58,11 @@ export default function AnalyticsPage() {
   const { data: shiftsData } = useQuery({ queryKey: ["/api/shifts"] });
   const { data: notifsData } = useQuery({ queryKey: ["/api/notifications"] });
   const { data: summaryData } = useQuery({ queryKey: ["/api/analytics/summary"] });
+  const { data: kpiData } = useQuery<{ kpis: Record<string, { value: number; unit: string }> }>({
+    queryKey: ["/api/kpi/compute"],
+    queryFn: () => fetch('/api/kpi/compute', { credentials: 'include' }).then(r => r.json()),
+    enabled: hasFeature("kpi_snapshots"),
+  });
   const { data: trendsData } = useQuery<{ date: string; washes: number; evidence: number; notifications: number }[]>({
     queryKey: ["/api/analytics/trends", { days: trendDays }],
     queryFn: () => fetch(`/api/analytics/trends?days=${trendDays}`, { credentials: 'include' }).then(r => r.json()),
@@ -65,6 +73,7 @@ export default function AnalyticsPage() {
   const shifts = Array.isArray(shiftsData) ? shiftsData : [];
   const notifs = Array.isArray(notifsData) ? notifsData : [];
   const summary = (summaryData || {}) as Record<string, any>;
+  const kpis = kpiData?.kpis || {};
   const trends = Array.isArray(trendsData) ? trendsData : [];
   const vByStatus = (summary.vehiclesByStatus || {}) as Record<string, number>;
   const wByStatus = (summary.washesByStatus || {}) as Record<string, number>;
@@ -85,7 +94,10 @@ export default function AnalyticsPage() {
   const criticalNotifs = nBySeverity.critical ?? notifs.filter((n: any) => n.severity === 'critical').length;
   const unreadNotifs = notifs.filter((n: any) => !n.read).length;
 
-  const fleetUtil = summary.fleetUtilization ?? (totalVehicles > 0 ? Math.round(((rentedCount + washingCount) / totalVehicles) * 100) : 0);
+  const fleetUtil = kpis.fleet_utilization?.value ?? summary.fleetUtilization ?? (totalVehicles > 0 ? Math.round(((rentedCount + washingCount) / totalVehicles) * 100) : 0);
+  const washSlaAttainment = kpis.wash_sla_attainment?.value ?? 0;
+  const avgTurnaround = kpis.avg_wash_turnaround?.value ?? 0;
+  const fleetAvailability = kpis.fleet_availability?.value ?? 0;
 
   // Trend-derived daily max for chart scales
   const maxTrendWashes = Math.max(...trends.map(t => t.washes), 1);
@@ -126,7 +138,9 @@ export default function AnalyticsPage() {
                 onClick={() => setTrendDays(d)}>{d}d</Button>
             ))}
           </div>
-          <Button variant="outline" size="sm" className="gap-1" onClick={handleExport} data-testid="button-export-analytics"><Download className="h-3 w-3" /> Export</Button>
+          <LockedFeature locked={!hasFeature("exports")}>
+            <Button variant="outline" size="sm" className="gap-1" onClick={handleExport} data-testid="button-export-analytics"><Download className="h-3 w-3" /> Export</Button>
+          </LockedFeature>
         </div>
       </div>
 
@@ -160,10 +174,10 @@ export default function AnalyticsPage() {
           </Card>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatCard title="Fleet Size" value={totalVehicles} icon={Car} subtitle={`${readyCount} ready`} trend={{ positive: true, text: `${fleetUtil}% utilized` }} />
-            <StatCard title="Active Washes" value={inProgressWashes} icon={Droplets} color="text-blue-400" subtitle={`${pendingWashes} queued · ${washesToday} today`} />
-            <StatCard title="Staff Scheduled" value={shifts.length} icon={Users} color="text-green-400" subtitle="This week" />
-            <StatCard title="Open Incidents" value={criticalNotifs} icon={AlertTriangle} color={criticalNotifs > 0 ? "text-red-400" : "text-muted-foreground"} subtitle={`${unreadNotifs} unread`} />
+            <StatCard title="Fleet Size" value={totalVehicles} icon={Car} subtitle={`${readyCount} ready · ${fleetAvailability}% available`} trend={{ positive: true, text: `${fleetUtil}% utilized` }} />
+            <StatCard title="Active Washes" value={inProgressWashes} icon={Droplets} color="text-blue-400" subtitle={`${pendingWashes} queued · ${washesToday} today`} trend={washSlaAttainment > 0 ? { positive: washSlaAttainment >= 80, text: `${washSlaAttainment}% SLA attainment` } : undefined} />
+            <StatCard title="Avg Turnaround" value={avgTurnaround > 0 ? `${avgTurnaround}m` : '—'} icon={Clock} color="text-green-400" subtitle="Wash cycle time" />
+            <StatCard title="Open Incidents" value={kpis.open_incidents?.value ?? criticalNotifs} icon={AlertTriangle} color={criticalNotifs > 0 ? "text-red-400" : "text-muted-foreground"} subtitle={`${unreadNotifs} unread`} />
           </div>
 
           <Tabs defaultValue="operations">

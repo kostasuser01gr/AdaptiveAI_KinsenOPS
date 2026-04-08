@@ -5,8 +5,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useLocation } from 'wouter';
 import { 
-  Send, Paperclip, Mic, ChevronDown, Bot, User, Zap,
-  Copy, RefreshCcw, Edit2, StopCircle, Lightbulb, Wrench, Hammer,
+  Send, Paperclip, ChevronDown, Bot, User, Zap,
+  Copy, RefreshCcw, Edit2, Lightbulb, Wrench, Hammer,
   Car, Droplets, CalendarDays, Activity, Shield, Brain, BarChart3,
   Hash, AtSign, Slash, CheckCircle2, Clock, ArrowRight
 } from 'lucide-react';
@@ -47,7 +47,7 @@ interface SlashCommand {
 }
 
 export default function ChatPage() {
-  const { t, sidebarOpen, isMobile, voiceMode, setVoiceMode, setCustomActions } = useApp();
+  const { t, sidebarOpen, isMobile, setCustomActions } = useApp();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -484,7 +484,7 @@ export default function ChatPage() {
   };
 
   const handleSend = () => {
-    if (!input.trim() && voiceMode !== 'listening') return;
+    if (!input.trim()) return;
 
     if (showSlashMenu && filteredSlashCommands.length > 0) {
       handleSlashSelect(filteredSlashCommands[selectedSlashIdx]);
@@ -508,7 +508,7 @@ export default function ChatPage() {
       }
     }
 
-    const userContent = voiceMode === 'listening' ? '(Voice message)' : input;
+    const userContent = input;
     const newMsg: LocalMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -520,7 +520,6 @@ export default function ChatPage() {
       const updated = [...prev, newMsg];
       setInput('');
       setIsTyping(true);
-      if (voiceMode === 'listening') setVoiceMode('idle');
       // Kick off AI call with current history snapshot
       callAI(userContent, updated);
       return updated;
@@ -600,11 +599,6 @@ export default function ChatPage() {
       }
     }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
-  };
-
-  const handleVoiceToggle = () => {
-    if (voiceMode === 'listening') handleSend();
-    else setVoiceMode('listening');
   };
 
   const copyToClipboard = (text: string) => {
@@ -824,8 +818,8 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={voiceMode === 'listening' ? "Listening..." : "Message DriveAI — type / for commands, @ for mentions..."}
-              className={`w-full max-h-[200px] min-h-[52px] resize-none bg-transparent px-4 py-4 text-[15px] focus:outline-none placeholder:text-muted-foreground/70 ${voiceMode === 'listening' ? 'text-primary' : ''}`}
+              placeholder="Message DriveAI — type / for commands, @ for mentions..."
+              className="w-full max-h-[200px] min-h-[52px] resize-none bg-transparent px-4 py-4 text-[15px] focus:outline-none placeholder:text-muted-foreground/70"
               rows={1}
               data-testid="input-chat-message"
             />
@@ -843,12 +837,8 @@ export default function ChatPage() {
                 </TooltipTrigger><TooltipContent>Slash commands</TooltipContent></Tooltip>
               </div>
               <div className="flex items-center gap-2">
-                <Button onClick={handleVoiceToggle} variant="ghost" size="icon"
-                  className={`h-8 w-8 rounded-full shrink-0 transition-colors ${voiceMode === 'listening' ? 'bg-primary/20 text-primary animate-pulse' : 'text-muted-foreground hover:text-foreground'}`}>
-                  {voiceMode === 'listening' ? <StopCircle className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                </Button>
-                <Button onClick={handleSend} disabled={(!input.trim() && voiceMode !== 'listening') || isTyping}
-                  className={`h-8 w-8 rounded-full shrink-0 transition-colors ${input.trim() || voiceMode === 'listening' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-muted text-muted-foreground'}`}
+                <Button onClick={handleSend} disabled={!input.trim() || isTyping}
+                  className={`h-8 w-8 rounded-full shrink-0 transition-colors ${input.trim() ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-muted text-muted-foreground'}`}
                   size="icon" data-testid="button-send-message">
                   <Send className="h-4 w-4" />
                 </Button>

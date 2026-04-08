@@ -8,11 +8,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Shield, Eye, Lock, FileText, AlertTriangle, Clock, Users, Download, Activity, Search, RotateCcw, Trash2, CheckCircle2, XCircle, UserCheck } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/useAuth";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { LockedFeature } from "@/components/LockedFeature";
 
 export default function TrustConsolePage() {
   const { user } = useAuth();
+  const { hasFeature } = useEntitlements();
   const { data: auditData } = useQuery({ queryKey: ["/api/audit-log"] });
   const { data: usersData } = useQuery({ queryKey: ["/api/users"] });
+  const { data: capabilityCatalog } = useQuery({ queryKey: ["/api/capabilities"] }) as { data: { capabilities?: Array<{ capability: string; description: string; defaultRoles: string[] }> } | undefined };
+  const { data: roleDefaults, isLoading: roleDefaultsLoading } = useQuery({
+    queryKey: ["/api/capabilities/roles"],
+    enabled: user?.role === "admin",
+  });
   const auditEntries = Array.isArray(auditData) ? auditData : [];
   const allUsers = Array.isArray(usersData) ? usersData : [];
   const [auditSearch, setAuditSearch] = React.useState('');
@@ -33,7 +41,9 @@ export default function TrustConsolePage() {
           <p className="text-sm text-muted-foreground">Privacy governance, audit trails, access reviews, soft-delete management, and compliance</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="gap-1" data-testid="button-export-audit"><Download className="h-3 w-3" /> Export</Button>
+          <LockedFeature locked={!hasFeature("trust_export_preview")}>
+            <Button variant="outline" size="sm" className="gap-1" data-testid="button-export-audit"><Download className="h-3 w-3" /> Export</Button>
+          </LockedFeature>
         </div>
       </div>
 
@@ -115,27 +125,54 @@ export default function TrustConsolePage() {
             </TabsContent>
 
             <TabsContent value="access" className="mt-4 space-y-4">
+              {/* ── Role summary cards ── */}
               {[
-                { role: "Admin", permissions: "Full platform access. User management, vehicle restore, hard delete, governance, all shift operations.", users: allUsers.filter((u: any) => u.role === 'admin').length, color: "text-red-400" },
-                { role: "Supervisor", permissions: "Shift create/edit/publish, audit log, workspace memory write, vehicle soft-delete, user list.", users: allUsers.filter((u: any) => u.role === 'supervisor').length, color: "text-orange-400" },
-                { role: "Coordinator", permissions: "Fleet, shifts, washers, analytics, shift management. No user management or governance.", users: allUsers.filter((u: any) => u.role === 'coordinator').length, color: "text-blue-400" },
-                { role: "Agent", permissions: "Fleet view, published shifts only, shift requests, wash queue, inbox. No settings or user management.", users: allUsers.filter((u: any) => u.role === 'agent').length, color: "text-green-400" },
-                { role: "Washer (Kiosk)", permissions: "Queue registration and chat only. No login required. Device-scoped access.", users: 0, color: "text-muted-foreground" },
-                { role: "Customer", permissions: "Photo upload and private chat. Reservation-scoped. Auto-expires after rental.", users: 0, color: "text-muted-foreground" },
-              ].map((role, i) => (
-                <Card key={i} className="glass-card" data-testid={`role-card-${i}`}>
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <h3 className={`font-semibold text-sm ${role.color}`}>{role.role}</h3>
-                        <Badge variant="outline" className="text-[9px]">{role.users} user{role.users !== 1 ? 's' : ''}</Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground">{role.permissions}</p>
+                { role: "admin", label: "Admin", color: "text-red-400" },
+                { role: "supervisor", label: "Supervisor", color: "text-orange-400" },
+                { role: "coordinator", label: "Coordinator", color: "text-blue-400" },
+                { role: "agent", label: "Agent", color: "text-green-400" },
+              ].map((r) => (
+                <Card key={r.role} className="glass-card" data-testid={`role-card-${r.role}`}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className={`font-semibold text-sm ${r.color}`}>{r.label}</h3>
+                      <Badge variant="outline" className="text-[9px]">
+                        {allUsers.filter((u: any) => u.role === r.role).length} user{allUsers.filter((u: any) => u.role === r.role).length !== 1 ? 's' : ''}
+                      </Badge>
                     </div>
-                    {user?.role === 'admin' && <Button variant="ghost" size="sm" className="text-xs">Configure</Button>}
+                    {/* Live capability list */}
+                    {capabilityCatalog?.capabilities ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {(capabilityCatalog.capabilities as Array<{ capability: string; description: string; defaultRoles: string[] }>).map((cap) => {
+                          const granted = cap.defaultRoles.includes(r.role);
+                          // Check for DB override if admin and roleDefaults loaded
+                          const dbOverride = Array.isArray(roleDefaults)
+                            ? roleDefaults.find((rd: any) => rd.role === r.role && rd.capability === cap.capability)
+                            : undefined;
+                          const effective = dbOverride ? dbOverride.granted : granted;
+                          const isOverridden = dbOverride !== undefined;
+                          return (
+                            <Badge
+                              key={cap.capability}
+                              variant={effective ? "default" : "outline"}
+                              className={`text-[9px] ${effective ? '' : 'opacity-40'} ${isOverridden ? 'ring-1 ring-yellow-400/50' : ''}`}
+                              title={`${cap.description}${isOverridden ? ' (overridden)' : ''}`}
+                            >
+                              {effective ? <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" /> : <XCircle className="h-2.5 w-2.5 mr-0.5" />}
+                              {cap.capability.replace(/_/g, ' ')}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Loading capabilities…</p>
+                    )}
                   </CardContent>
                 </Card>
               ))}
+              {user?.role === 'admin' && roleDefaultsLoading && (
+                <p className="text-xs text-muted-foreground text-center">Loading role overrides…</p>
+              )}
             </TabsContent>
 
             <TabsContent value="softdelete" className="mt-4 space-y-4">

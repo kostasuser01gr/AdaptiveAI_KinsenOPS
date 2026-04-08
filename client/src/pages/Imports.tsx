@@ -69,16 +69,17 @@ export default function ImportsPage() {
 
   const commitImportMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await apiRequest('POST', `/api/imports/${id}/confirm`);
+      const res = await apiRequest('POST', `/api/imports/${id}/apply`);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/imports'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/vehicles'] });
       setSelectedImport(null);
       setShowDiffView(false);
-      toast({ title: "Import Committed", description: "Records have been committed successfully." });
+      toast({ title: "Import Applied", description: `${data.applied} records applied successfully.${data.errors?.length ? ` ${data.errors.length} errors.` : ''}` });
     },
-    onError: () => toast({ title: "Commit Failed", description: "The import could not be committed. Check if the data is still valid and try again.", variant: "destructive" }),
+    onError: () => toast({ title: "Apply Failed", description: "The import could not be applied. Check if the data is still valid and try again.", variant: "destructive" }),
   });
 
   const discardImportMutation = useMutation({
@@ -206,7 +207,7 @@ export default function ImportsPage() {
 
             <TabsContent value="active" className="mt-4 space-y-4">
               {activeImports.length > 0 ? activeImports.map(imp => (
-                <ImportCard key={imp.id} data={imp} onSelect={() => setSelectedImport(imp)} onDiff={() => { setSelectedImport(imp); setShowDiffView(true); }} />
+                <ImportCard key={imp.id} data={imp} onSelect={() => setSelectedImport(imp)} onDiff={() => { setSelectedImport(imp); setShowDiffView(true); }} onDiscard={() => discardImportMutation.mutate(imp.id)} />
               )) : (
                 <Card className="border-dashed">
                   <CardContent className="flex flex-col items-center py-10 text-muted-foreground">
@@ -403,7 +404,7 @@ export default function ImportsPage() {
   );
 }
 
-function ImportCard({ data, onSelect, onDiff }: { data: ImportRecord; onSelect: () => void; onDiff: () => void }) {
+function ImportCard({ data, onSelect, onDiff, onDiscard }: { data: ImportRecord; onSelect: () => void; onDiff: () => void; onDiscard?: () => void }) {
   const statusConfig: Record<string, { color: string; label: string; icon: React.ReactNode }> = {
     uploading: { color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', label: 'Uploading', icon: <Loader2 className="h-3 w-3 animate-spin" /> },
     mapping: { color: 'bg-purple-500/20 text-purple-400 border-purple-500/30', label: 'AI Mapping', icon: <Brain className="h-3 w-3" /> },
@@ -447,7 +448,7 @@ function ImportCard({ data, onSelect, onDiff }: { data: ImportRecord; onSelect: 
           {data.status === 'reviewing' && (
             <div className="flex flex-col gap-2">
               <Button size="sm" onClick={(e) => { e.stopPropagation(); onDiff(); }} data-testid={`button-review-${data.id}`}>Review Diffs</Button>
-              <Button variant="ghost" size="sm" className="text-destructive">Discard</Button>
+              <Button variant="ghost" size="sm" className="text-destructive" onClick={(e) => { e.stopPropagation(); onDiscard?.(); }} data-testid={`button-discard-${data.id}`}>Discard</Button>
             </div>
           )}
         </div>

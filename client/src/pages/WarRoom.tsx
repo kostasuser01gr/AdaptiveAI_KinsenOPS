@@ -54,6 +54,22 @@ export default function WarRoomPage() {
   const crisisRooms = allRooms.filter((r: any) => r.priority === 'critical');
   const entityIcons: Record<string, any> = { vehicle: Car, shift: Clock, operations: Users, incident: AlertTriangle, import: FileText, customer: Shield };
 
+  // Fetch linked incident if room is incident-typed
+  const linkedIncidentId = currentRoom?.entityType === 'incident' ? currentRoom.entityId : (currentRoom?.metadata as any)?.incidentId;
+  const { data: linkedIncident } = useQuery({
+    queryKey: ["/api/incidents", linkedIncidentId],
+    queryFn: async () => { const r = await fetch(`/api/incidents/${linkedIncidentId}`, { credentials: 'include' }); return r.json(); },
+    enabled: !!linkedIncidentId,
+  });
+
+  const updateIncidentMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => { const res = await apiRequest("PATCH", `/api/incidents/${id}`, data); return res.json(); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/entity-rooms", selectedRoom, "messages"] });
+    },
+  });
+
   const convertToAction = (msg: any) => {
     sendMutation.mutate(`[TASK CREATED] From message: "${msg.content.substring(0, 60)}..." — Assigned for review.`);
   };
@@ -185,6 +201,46 @@ export default function WarRoomPage() {
                   )}
                 </div>
               </div>
+
+              {/* Incident lifecycle panel */}
+              {linkedIncident && linkedIncident.id && (
+                <div className="px-4 py-2 border-b bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className={`h-4 w-4 ${linkedIncident.severity === 'critical' ? 'text-red-500' : linkedIncident.severity === 'high' ? 'text-orange-400' : 'text-yellow-400'}`} />
+                      <span className="text-sm font-semibold">INC-{linkedIncident.id}</span>
+                      <Badge variant="outline" className="text-[9px]">{linkedIncident.severity}</Badge>
+                      <Badge variant="secondary" className="text-[9px]">{linkedIncident.status}</Badge>
+                      {linkedIncident.category && <Badge variant="outline" className="text-[9px]">{linkedIncident.category}</Badge>}
+                    </div>
+                    <div className="flex gap-1">
+                      {linkedIncident.status === 'open' && (
+                        <Button size="sm" variant="outline" className="h-6 text-[10px]"
+                          onClick={() => updateIncidentMutation.mutate({ id: linkedIncident.id, data: { status: 'investigating' } })}
+                          data-testid="button-incident-investigate">Investigate</Button>
+                      )}
+                      {linkedIncident.status === 'investigating' && (
+                        <Button size="sm" variant="outline" className="h-6 text-[10px]"
+                          onClick={() => updateIncidentMutation.mutate({ id: linkedIncident.id, data: { status: 'mitigating' } })}
+                          data-testid="button-incident-mitigate">Mitigate</Button>
+                      )}
+                      {(linkedIncident.status === 'investigating' || linkedIncident.status === 'mitigating') && (
+                        <Button size="sm" variant="outline" className="h-6 text-[10px] text-green-400"
+                          onClick={() => updateIncidentMutation.mutate({ id: linkedIncident.id, data: { status: 'resolved' } })}
+                          data-testid="button-incident-resolve">Resolve</Button>
+                      )}
+                      {linkedIncident.status === 'resolved' && (
+                        <Button size="sm" variant="outline" className="h-6 text-[10px]"
+                          onClick={() => updateIncidentMutation.mutate({ id: linkedIncident.id, data: { status: 'closed' } })}
+                          data-testid="button-incident-close">Close</Button>
+                      )}
+                    </div>
+                  </div>
+                  {linkedIncident.description && (
+                    <p className="text-xs text-muted-foreground mt-1 truncate">{linkedIncident.description}</p>
+                  )}
+                </div>
+              )}
 
               <div className="flex flex-1 overflow-hidden">
                 <ScrollArea className="flex-1 p-4">

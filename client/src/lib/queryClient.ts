@@ -1,5 +1,25 @@
 import { QueryClient, QueryFunction, onlineManager } from "@tanstack/react-query";
 
+/**
+ * Check if an error is an entitlement 403 from the backend.
+ * Returns the feature key if it is, otherwise null.
+ */
+export function parseEntitlementError(error: unknown): string | null {
+  if (!(error instanceof Error)) return null;
+  try {
+    // Error message shape: "403: {json}"
+    const msg = error.message;
+    if (!msg.startsWith("403:")) return null;
+    const json = JSON.parse(msg.slice(4).trim());
+    if (json?.code === "ENTITLEMENT_REQUIRED" && json?.feature) {
+      return json.feature as string;
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return null;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;

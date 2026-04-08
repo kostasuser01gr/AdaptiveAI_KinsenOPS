@@ -5,7 +5,7 @@ This guide will help you set up and run the Car Rental Operations Platform.
 ## Prerequisites
 
 - Node.js 18+ installed
-- A Supabase account and project
+- A PostgreSQL database (Supabase or Railway Postgres)
 - (Optional) Anthropic API key for AI features
 
 ## Environment Configuration
@@ -40,8 +40,6 @@ postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supaba
 
 2. Update `.env` with your credentials:
    ```env
-   VITE_SUPABASE_URL=https://your-project.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-key-here
    DATABASE_URL=postgresql://postgres.[PROJECT-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
    SESSION_SECRET=generate-a-secure-random-string
    ```
@@ -134,8 +132,7 @@ Required environment variables:
 - `DATABASE_URL` — Railway Postgres internal connection string (use `${{Postgres.DATABASE_URL}}` reference)
 - `SESSION_SECRET` — Cryptographically random, minimum 64 characters (`openssl rand -hex 64`)
 - `NODE_ENV` — Must be `production`
-- `PORT` — `8080` (required by Railway)
-- `CORS_ALLOWED_ORIGINS` — `https://adaptiveai-frontend.vercel.app`
+- `PORT` — Set by Railway automatically (app defaults to `5000`)
 
 Optional:
 - `ANTHROPIC_API_KEY` — For AI chat. Omit to gracefully disable AI features.

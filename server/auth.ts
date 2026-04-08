@@ -19,6 +19,7 @@ declare global {
       station: string | null;
       language: string;
       theme: string;
+      workspaceId: string;
     }
   }
 }
@@ -76,7 +77,7 @@ export function setupAuth(app: Express) {
     passport.use(
       new LocalStrategy(async (username, password, done) => {
         try {
-          const user = await storage.getUserByUsername(username);
+          const user = await storage.getUserByUsernameUnscoped(username);
           if (!user) return done(null, false, { message: "Invalid credentials" });
           const valid = await comparePasswords(password, user.password);
           if (!valid) return done(null, false, { message: "Invalid credentials" });
@@ -94,7 +95,7 @@ export function setupAuth(app: Express) {
       return done(null, false);
     }
     try {
-      const user = await storage.getUser(id);
+      const user = await storage.getUserById(id);
       if (!user) return done(null, false);
       const { password: _pw, ...safeUser } = user;
       done(null, safeUser as Express.User);
@@ -117,7 +118,7 @@ export function setupAuth(app: Express) {
         return res.status(400).json({ message: "Password must be at least 8 characters" });
       }
 
-      const existing = await storage.getUserByUsername(username);
+      const existing = await storage.getUserByUsernameUnscoped(username);
       if (existing) {
         return res.status(409).json({ message: "Username already exists" });
       }

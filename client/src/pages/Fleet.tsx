@@ -99,6 +99,43 @@ export default function FleetPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }),
   });
 
+  const washQueueMutation = useMutation({
+    mutationFn: async (vehicle: Vehicle) => {
+      const res = await apiRequest("POST", "/api/wash-queue", {
+        vehiclePlate: vehicle.plate,
+        washType: "Quick Wash",
+        priority: vehicle.sla === 'high' || vehicle.sla === 'premium' ? 'High' : 'Normal',
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wash-queue"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      toast({ title: "Added to wash queue" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const incidentMutation = useMutation({
+    mutationFn: async (vehicle: Vehicle) => {
+      const res = await apiRequest("POST", "/api/incidents", {
+        title: `Vehicle Incident: ${vehicle.plate}`,
+        description: `Incident reported for ${vehicle.plate} (${vehicle.model})`,
+        severity: "high",
+        category: "vehicle_damage",
+        vehicleId: vehicle.id,
+        stationId: vehicle.stationId,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+      toast({ title: "Incident created" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   const allVehicles = Array.isArray(vehicles) ? vehicles : [];
   const filtered = allVehicles.filter(v => {
     const matchSearch = v.plate.toLowerCase().includes(search.toLowerCase()) || v.model.toLowerCase().includes(search.toLowerCase());
@@ -129,7 +166,13 @@ export default function FleetPage() {
           <p className="text-sm text-muted-foreground">Predictive readiness, vehicle memory, damage clustering, and lifecycle management</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2 text-destructive border-destructive/50 hover:bg-destructive/10" data-testid="button-log-incident">
+          <Button variant="outline" className="gap-2 text-destructive border-destructive/50 hover:bg-destructive/10"
+            onClick={() => {
+              if (!selectedVehicle) { toast({ title: "Select a vehicle", description: "Click a vehicle row first to log an incident." }); return; }
+              incidentMutation.mutate(selectedVehicle);
+            }}
+            disabled={incidentMutation.isPending}
+            data-testid="button-log-incident">
             <ShieldAlert className="h-4 w-4" /> Log Incident
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -335,19 +378,27 @@ export default function FleetPage() {
                 <TabsList className="w-full mb-4">
                   <TabsTrigger value="memory" className="flex-1 text-xs">Memory</TabsTrigger>
                   <TabsTrigger value="actions" className="flex-1 text-xs">Actions</TabsTrigger>
+                  <TabsTrigger value="workshop" className="flex-1 text-xs">Workshop</TabsTrigger>
                 </TabsList>
                 <TabsContent value="memory"><VehicleMemoryPanel vehicle={selectedVehicle} /></TabsContent>
                 <TabsContent value="actions" className="space-y-2">
-                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" data-testid="button-action-wash">
+                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs"
+                    onClick={() => washQueueMutation.mutate(selectedVehicle)}
+                    disabled={washQueueMutation.isPending}
+                    data-testid="button-action-wash">
                     <Activity className="h-3 w-3" /> Send to Wash Queue
                   </Button>
                   <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" onClick={() => updateMutation.mutate({ id: selectedVehicle.id, data: { status: 'ready' } })} data-testid="button-action-ready">
                     <CheckCircle2 className="h-3 w-3" /> Mark as Ready
                   </Button>
-                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" data-testid="button-action-transfer">
+                  {/* Transfer Station: deferred — requires station picker dialog with /api/stations data */}
+                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" disabled data-testid="button-action-transfer">
                     <MapPin className="h-3 w-3" /> Transfer Station
                   </Button>
-                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" data-testid="button-action-incident">
+                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs"
+                    onClick={() => incidentMutation.mutate(selectedVehicle)}
+                    disabled={incidentMutation.isPending}
+                    data-testid="button-action-incident">
                     <ShieldAlert className="h-3 w-3" /> Log Incident
                   </Button>
                   {canDelete && (
@@ -356,11 +407,82 @@ export default function FleetPage() {
                     </Button>
                   )}
                 </TabsContent>
+                <TabsContent value="workshop">
+                  <WorkshopJobsPanel vehicleId={selectedVehicle.id} />
+                </TabsContent>
               </Tabs>
             </ScrollArea>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Workshop Jobs Panel (Phase 4.2B) ───
+function WorkshopJobsPanel({ vehicleId }: { vehicleId: number }) {
+  // We query repair orders for this vehicle first, then get workshop jobs linked to them
+  const { data: repairOrders } = useQuery<Array<{ id: number; title: string; status: string }>>({
+    queryKey: ["/api/repair-orders", { vehicleId }],
+    queryFn: () => fetch(`/api/repair-orders?vehicleId=${vehicleId}`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!vehicleId,
+  });
+
+  const repairOrderIds = repairOrders?.map(ro => ro.id) ?? [];
+  const firstRoId = repairOrderIds[0];
+
+  const { data: workshopJobs } = useQuery<Array<{
+    id: number;
+    workshopName: string;
+    normalizedStatus: string;
+    externalStatus: string | null;
+    estimateAmount: number | null;
+    invoiceRef: string | null;
+    updatedAt: string;
+  }>>({
+    queryKey: ["/api/workshop-jobs", { repairOrderId: firstRoId }],
+    queryFn: () => fetch(`/api/workshop-jobs?repairOrderId=${firstRoId}`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!firstRoId,
+  });
+
+  const statusColor: Record<string, string> = {
+    pending: "bg-gray-500/10 text-gray-400",
+    estimate_received: "bg-blue-500/10 text-blue-400",
+    approved: "bg-indigo-500/10 text-indigo-400",
+    parts_ordered: "bg-amber-500/10 text-amber-400",
+    in_repair: "bg-orange-500/10 text-orange-400",
+    qa_ready: "bg-purple-500/10 text-purple-400",
+    completed: "bg-green-500/10 text-green-400",
+    cancelled: "bg-red-500/10 text-red-400",
+  };
+
+  return (
+    <div className="space-y-3">
+      <h4 className="text-xs font-semibold text-muted-foreground">Workshop Jobs</h4>
+      {(!workshopJobs || workshopJobs.length === 0) ? (
+        <p className="text-xs text-muted-foreground">No workshop jobs linked to this vehicle.</p>
+      ) : (
+        workshopJobs.map((job) => (
+          <Card key={job.id} className="glass-panel">
+            <CardContent className="p-3 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium">{job.workshopName}</span>
+                <Badge className={statusColor[job.normalizedStatus] || ""} variant="outline">
+                  {job.normalizedStatus.replace(/_/g, " ")}
+                </Badge>
+              </div>
+              {job.externalStatus && (
+                <p className="text-[10px] text-muted-foreground">External: {job.externalStatus}</p>
+              )}
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                {job.estimateAmount != null && <span>${job.estimateAmount.toFixed(2)}</span>}
+                {job.invoiceRef && <span>Inv: {job.invoiceRef}</span>}
+                <span>{new Date(job.updatedAt).toLocaleDateString()}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      )}
     </div>
   );
 }

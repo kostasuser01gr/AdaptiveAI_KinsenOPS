@@ -10,6 +10,7 @@ import { metricsMiddleware } from "./observability/metrics.js";
 import { wsManager } from "./websocket.js";
 import { pool } from "./db.js";
 import { apiLimiter } from "./middleware/rate-limiter.js";
+import { taskRunner } from "./tasks/index.js";
 
 const app = express();
 const httpServer = createServer(app);
@@ -33,7 +34,7 @@ app.use(
         styleSrc: ["'self'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
-        connectSrc: ["'self'", "https://vjrwdztuyrdjaixllclw.supabase.co"],
+        connectSrc: ["'self'"],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],
@@ -142,6 +143,22 @@ app.use((req, res, next) => {
   if (process.env.NODE_ENV !== "production" || process.env.SEED_DATABASE === "true") {
     await seedDatabase();
   }
+
+  // Start centralised task runner (SLA breach check, KPI snapshots, anomaly detection, etc.)
+  taskRunner.start();
+
+  // Graceful shutdown: stop accepting → drain tasks → close WS → close DB → exit
+  const shutdown = async () => {
+    logger.info('Shutdown initiated');
+    await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    await taskRunner.stop();
+    wsManager.destroy();
+    await pool.end();
+    logger.info('Graceful shutdown complete');
+    process.exit(0);
+  };
+  process.on('SIGTERM', () => { shutdown().catch((err) => { logger.error('Shutdown error', err); process.exit(1); }); });
+  process.on('SIGINT', () => { shutdown().catch((err) => { logger.error('Shutdown error', err); process.exit(1); }); });
 
   app.use((err: Error & { status?: number; statusCode?: number }, req: Request, res: Response, next: NextFunction) => {
     const status = err.status ?? err.statusCode ?? 500;

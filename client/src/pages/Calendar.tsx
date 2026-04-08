@@ -13,10 +13,12 @@ export default function CalendarPage() {
   const { data: shiftsData } = useQuery({ queryKey: ["/api/shifts"] });
   const { data: washData } = useQuery({ queryKey: ["/api/wash-queue"] });
   const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
+  const { data: reservationsData } = useQuery({ queryKey: ["/api/reservations"] });
 
   const shifts = Array.isArray(shiftsData) ? shiftsData : [];
   const washes = Array.isArray(washData) ? washData : [];
   const vehicles = Array.isArray(vehiclesData) ? vehiclesData : [];
+  const reservationsList = Array.isArray(reservationsData) ? reservationsData : [];
 
   const [weekOffset, setWeekOffset] = React.useState(0);
   const today = new Date();
@@ -41,12 +43,28 @@ export default function CalendarPage() {
     return { start, end };
   };
 
-  const bookingEvents = [
-    { day: 0, hour: 9, label: 'KLO-1122 Pickup', type: 'pickup' },
-    { day: 4, hour: 16, label: 'PLM-7788 Pickup', type: 'pickup' },
-    { day: 0, hour: 14, label: 'YHA-1234 Return', type: 'return' },
-    { day: 2, hour: 10, label: 'ZXC-9876 Due Back', type: 'return' },
-  ];
+  // Build fleet events from real reservations
+  const fleetEvents = React.useMemo(() => {
+    const events: { day: number; hour: number; label: string; type: 'pickup' | 'return' }[] = [];
+    for (const r of reservationsList) {
+      const pickup = new Date(r.pickupDate);
+      const ret = new Date(r.returnDate);
+      // Find vehicle plate for the label
+      const vehicle = vehicles.find((v: any) => v.id === r.vehicleId);
+      const plate = vehicle ? (vehicle as any).plate : `Res#${r.id}`;
+      // Check if pickup falls in current week
+      for (let di = 0; di < 7; di++) {
+        const wd = weekDates[di];
+        if (pickup.toDateString() === wd.toDateString()) {
+          events.push({ day: di, hour: pickup.getHours() || 9, label: `${plate} Pickup`, type: 'pickup' });
+        }
+        if (ret.toDateString() === wd.toDateString()) {
+          events.push({ day: di, hour: ret.getHours() || 16, label: `${plate} Return`, type: 'return' });
+        }
+      }
+    }
+    return events;
+  }, [reservationsList, vehicles, weekDates]);
 
   return (
     <div className="flex flex-col h-full bg-background">
@@ -129,7 +147,7 @@ export default function CalendarPage() {
             </div>
             {DAYS.map((_, di) => (
               <div key={di} className={`p-1.5 ${di < 6 ? 'border-r' : ''} space-y-1 min-h-[48px]`}>
-                {bookingEvents.filter(e => e.day === di).map((ev, ei) => (
+                {fleetEvents.filter(e => e.day === di).map((ev, ei) => (
                   <div key={ei} className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${ev.type === 'pickup' ? 'bg-orange-500/20 text-orange-300' : 'bg-cyan-500/20 text-cyan-300'}`} data-testid={`event-${di}-${ei}`}>
                     {ev.label}
                   </div>

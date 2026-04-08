@@ -14,6 +14,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/useAuth";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { LockedFeature } from "@/components/LockedFeature";
 
 const triggerLabels: Record<string, string> = {
   qc_fail: "QC Inspection Fails",
@@ -42,6 +44,9 @@ export default function AutomationsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { user } = useAuth();
+  const { hasFeature } = useEntitlements();
+  const canExecute = hasFeature("automation_execution");
+  const canAiDraft = hasFeature("ai_automation_drafting");
   const { data: rules } = useQuery({ queryKey: ["/api/automation-rules"] });
   const allRules = Array.isArray(rules) ? rules : [];
 
@@ -50,10 +55,18 @@ export default function AutomationsPage() {
   const [newDesc, setNewDesc] = React.useState('');
   const [newTrigger, setNewTrigger] = React.useState('qc_fail');
   const [newScope, setNewScope] = React.useState('shared');
+  const [newAction, setNewAction] = React.useState('send_notification');
   const [nlInput, setNlInput] = React.useState('');
   const [dryRunId, setDryRunId] = React.useState<number | null>(null);
   const [showDryRun, setShowDryRun] = React.useState(false);
   const [tab, setTab] = React.useState('all');
+  const [showHistory, setShowHistory] = React.useState<number | null>(null);
+
+  const { data: executions } = useQuery({
+    queryKey: ["/api/automation-executions", showHistory],
+    queryFn: async () => { const r = await fetch(`/api/automation-executions?ruleId=${showHistory}&limit=20`, { credentials: 'include' }); return r.json(); },
+    enabled: !!showHistory,
+  });
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", "/api/automation-rules", data); },
@@ -68,6 +81,16 @@ export default function AutomationsPage() {
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/automation-rules/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/automation-rules"] }); toast({ title: "Rule deleted" }); },
+  });
+
+  const executeMutation = useMutation({
+    mutationFn: async (id: number) => { const res = await apiRequest("POST", `/api/automation-rules/${id}/execute`); return res.json(); },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/automation-rules"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/automation-executions"] });
+      toast({ title: data.status === 'success' ? "Rule executed successfully" : "Execution failed", description: data.error || undefined, variant: data.status === 'failure' ? 'destructive' : undefined });
+    },
+    onError: (err: Error) => toast({ title: "Execution error", description: err.message, variant: "destructive" }),
   });
 
   const parseNaturalLanguage = () => {
@@ -141,6 +164,19 @@ export default function AutomationsPage() {
                     </Select>
                   </div>
                 </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Action</label>
+                  <Select value={newAction} onValueChange={setNewAction}>
+                    <SelectTrigger data-testid="select-action"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="send_notification">Send Notification</SelectItem>
+                      <SelectItem value="create_incident">Create Incident</SelectItem>
+                      <SelectItem value="create_room">Create War Room</SelectItem>
+                      <SelectItem value="update_vehicle_status">Update Vehicle Status</SelectItem>
+                      <SelectItem value="log_event">Log Event</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 {conflictCheck(newTrigger) && (
                   <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-2 flex items-center gap-2 text-xs text-yellow-400">
                     <AlertTriangle className="h-3 w-3" /> {conflictCheck(newTrigger)}
@@ -152,7 +188,7 @@ export default function AutomationsPage() {
                   <p className="text-[10px] text-muted-foreground mt-1">Scope: {newScope === 'shared' ? 'Visible to all team members' : 'Only visible to you'}</p>
                 </div>
                 <Button className="w-full" disabled={!newName.trim()} data-testid="button-save-rule"
-                  onClick={() => createMutation.mutate({ name: newName, description: newDesc, trigger: newTrigger, scope: newScope, conditions: {}, actions: [{ type: "notify", target: "coordinator" }], active: true, version: 1 })}>
+                  onClick={() => createMutation.mutate({ name: newName, description: newDesc, trigger: newTrigger, scope: newScope, conditions: {}, actions: [{ type: newAction, title: `[Auto] ${newName}`, severity: 'info', audience: 'broadcast' }], active: true, version: 1 })}>
                   Create Rule
                 </Button>
               </div>
@@ -172,9 +208,11 @@ export default function AutomationsPage() {
                     onKeyDown={e => e.key === 'Enter' && nlInput.trim() && parseNaturalLanguage()}
                     className="bg-muted/30" data-testid="input-natural-language" />
                 </div>
-                <Button onClick={parseNaturalLanguage} disabled={!nlInput.trim()} className="gap-2" data-testid="button-parse-nl">
-                  <Zap className="h-4 w-4" /> Parse
-                </Button>
+                <LockedFeature locked={!canAiDraft}>
+                  <Button onClick={parseNaturalLanguage} disabled={!nlInput.trim()} className="gap-2" data-testid="button-parse-nl">
+                    <Zap className="h-4 w-4" /> Parse
+                  </Button>
+                </LockedFeature>
               </div>
               <p className="text-[10px] text-muted-foreground mt-2">AI will parse your intent into a trigger → action rule with scope and conditions.</p>
             </CardContent>
@@ -228,16 +266,48 @@ export default function AutomationsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-4">
-                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" data-testid={`button-dry-run-${rule.id}`}
-                        onClick={() => { setDryRunId(rule.id); setShowDryRun(true); }}>
-                        <FlaskConical className="h-3 w-3" /> Dry Run
+                      <LockedFeature locked={!canExecute}>
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" data-testid={`button-execute-${rule.id}`}
+                          onClick={() => executeMutation.mutate(rule.id)} disabled={!rule.active || executeMutation.isPending}>
+                          <Play className="h-3 w-3" /> Run
+                        </Button>
+                      </LockedFeature>
+                      <Button variant="outline" size="sm" className="h-7 text-xs gap-1" data-testid={`button-history-${rule.id}`}
+                        onClick={() => setShowHistory(showHistory === rule.id ? null : rule.id)}>
+                        <History className="h-3 w-3" /> History
                       </Button>
+                      <LockedFeature locked={!canExecute}>
+                        <Button variant="outline" size="sm" className="h-7 text-xs gap-1" data-testid={`button-dry-run-${rule.id}`}
+                          onClick={() => { setDryRunId(rule.id); setShowDryRun(true); }}>
+                          <FlaskConical className="h-3 w-3" /> Dry Run
+                        </Button>
+                      </LockedFeature>
                       <Switch checked={rule.active} onCheckedChange={(checked) => toggleMutation.mutate({ id: rule.id, active: checked })} data-testid={`switch-toggle-${rule.id}`} />
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMutation.mutate(rule.id)} data-testid={`button-delete-${rule.id}`}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
+                  {/* Execution history panel */}
+                  {showHistory === rule.id && Array.isArray(executions) && (
+                    <div className="mt-3 border-t pt-3 space-y-2">
+                      <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                        <History className="h-3 w-3" /> Execution Log
+                      </h4>
+                      {executions.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">No executions yet.</p>
+                      ) : executions.map((exec: any) => (
+                        <div key={exec.id} className="flex items-center gap-2 p-2 rounded bg-muted/20 text-xs">
+                          <div className={`h-2 w-2 rounded-full ${exec.status === 'success' ? 'bg-green-400' : exec.status === 'failure' ? 'bg-red-400' : 'bg-yellow-400'}`} />
+                          <span className="font-mono">#{exec.id}</span>
+                          <Badge variant={exec.status === 'success' ? 'default' : 'destructive'} className="text-[9px]">{exec.status}</Badge>
+                          {exec.durationMs && <span className="text-muted-foreground">{exec.durationMs}ms</span>}
+                          <span className="text-muted-foreground ml-auto">{new Date(exec.createdAt).toLocaleString()}</span>
+                          {exec.error && <span className="text-red-400 truncate max-w-48">{exec.error}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}

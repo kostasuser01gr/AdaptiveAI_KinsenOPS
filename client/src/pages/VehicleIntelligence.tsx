@@ -238,6 +238,7 @@ export default function VehicleIntelligencePage() {
                     <TabsTrigger value="damage" data-testid="tab-damage">Damage Heatmap</TabsTrigger>
                     <TabsTrigger value="predictive" data-testid="tab-predictive">Predictive</TabsTrigger>
                     <TabsTrigger value="memory" data-testid="tab-memory">Vehicle Memory</TabsTrigger>
+                    <TabsTrigger value="telematics" data-testid="tab-telematics">Telematics</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="timeline" className="mt-4 space-y-4">
@@ -447,6 +448,10 @@ export default function VehicleIntelligencePage() {
                       ));
                     })()}
                   </TabsContent>
+
+                  <TabsContent value="telematics" className="mt-4 space-y-3">
+                    <TelematicsPanel vehicleId={selectedVehicle.id} />
+                  </TabsContent>
                 </Tabs>
               </div>
             </ScrollArea>
@@ -460,6 +465,81 @@ export default function VehicleIntelligencePage() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Telematics Panel (Phase 4.2B) ───
+function TelematicsPanel({ vehicleId }: { vehicleId: number }) {
+  const { data: summary } = useQuery<{
+    vehicleId: number;
+    totalEvents: number;
+    byType: Record<string, number>;
+    recentEvents: Array<{
+      id: number;
+      eventType: string;
+      severity: string;
+      occurredAt: string;
+      payload: unknown;
+      source: string;
+    }>;
+  }>({
+    queryKey: ["/api/telematics/vehicles", vehicleId, "summary"],
+    queryFn: () => fetch(`/api/telematics/vehicles/${vehicleId}/summary`, { credentials: "include" }).then(r => r.json()),
+    enabled: !!vehicleId,
+  });
+
+  if (!summary) {
+    return <p className="text-sm text-muted-foreground">No telematics data available.</p>;
+  }
+
+  const severityColor: Record<string, string> = {
+    info: "bg-blue-500/10 text-blue-400 border-blue-500/20",
+    warning: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    critical: "bg-red-500/10 text-red-400 border-red-500/20",
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Telematics Events</h3>
+        <Badge variant="outline">{summary.totalEvents} total</Badge>
+      </div>
+
+      {Object.keys(summary.byType).length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          {Object.entries(summary.byType).map(([type, count]) => (
+            <Card key={type} className="glass-panel">
+              <CardContent className="p-2 text-center">
+                <p className="text-lg font-bold">{count}</p>
+                <p className="text-[10px] text-muted-foreground">{type.replace(/_/g, " ")}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <h4 className="text-xs font-semibold text-muted-foreground">Recent Events</h4>
+        {summary.recentEvents.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No events recorded yet.</p>
+        ) : (
+          summary.recentEvents.slice(0, 15).map((ev) => (
+            <Card key={ev.id} className="glass-panel">
+              <CardContent className="p-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-3 w-3 text-muted-foreground" />
+                  <div>
+                    <p className="text-xs font-medium">{ev.eventType.replace(/_/g, " ")}</p>
+                    <p className="text-[10px] text-muted-foreground">{new Date(ev.occurredAt).toLocaleString()} · {ev.source}</p>
+                  </div>
+                </div>
+                <Badge className={severityColor[ev.severity] || ""} variant="outline">{ev.severity}</Badge>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   );

@@ -386,50 +386,6 @@ export default function DigitalTwinPage() {
               </Card>
             </TabsContent>
 
-            <TabsContent value="timeline" className="space-y-4">
-              <Card className="glass-card">
-                <CardHeader className="pb-3"><CardTitle className="text-sm flex items-center gap-2"><History className="h-4 w-4" /> Snapshot Timeline ({timeline.length} snapshots)</CardTitle></CardHeader>
-                <CardContent>
-                  {timeline.length > 0 ? (
-                    <div className="space-y-3 relative">
-                      <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
-                      {timeline.slice(0, 50).map((snap: any, i: number) => {
-                        const snapData = snap.data as Record<string, unknown> || {};
-                        const stationName = allStations.find((s: any) => s.id === snap.stationId)?.name || `Station #${snap.stationId}`;
-                        return (
-                          <div key={i} className="flex gap-3 pl-8 relative" data-testid={`snapshot-${i}`}>
-                            <div className="absolute left-[13px] top-2 h-3 w-3 rounded-full bg-primary border-2 border-background" />
-                            <div className="flex-1 p-3 rounded-lg border bg-muted/20">
-                              <div className="flex items-center justify-between mb-1">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-[10px]">{snap.snapshotType}</Badge>
-                                  <span className="text-xs font-medium">{stationName}</span>
-                                </div>
-                                <span className="text-xs text-muted-foreground">{new Date(snap.createdAt).toLocaleString()}</span>
-                              </div>
-                              {snapData && typeof snapData === 'object' && (
-                                <div className="flex gap-4 text-xs text-muted-foreground mt-1">
-                                  {(snapData as any).ready !== undefined && <span>Ready: {(snapData as any).ready}</span>}
-                                  {(snapData as any).washing !== undefined && <span>Washing: {(snapData as any).washing}</span>}
-                                  {(snapData as any).queueLength !== undefined && <span>Queue: {(snapData as any).queueLength}</span>}
-                                  {(snapData as any).riskLevel && <span>Risk: {(snapData as any).riskLevel}</span>}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                      <p>No snapshots recorded yet. Snapshots are created automatically as operations run.</p>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
             <TabsContent value="risks" className="space-y-4">
               {(() => {
                 const risks: { title: string; level: string; desc: string }[] = [];

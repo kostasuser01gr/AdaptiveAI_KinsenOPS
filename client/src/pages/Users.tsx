@@ -106,7 +106,7 @@ export default function UsersPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">{t('users')}</h1>
         </div>
-        <Button size="sm" className="gap-2" disabled>
+        <Button size="sm" className="gap-2" disabled title="User invitations are not yet available">
           <UserPlus className="h-4 w-4" />
           Invite User
         </Button>

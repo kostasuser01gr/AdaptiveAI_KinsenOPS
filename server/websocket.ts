@@ -124,7 +124,7 @@ class WebSocketManager {
           client.ws.ping();
         }
       }
-    }, 30_000);
+    }, 30_000).unref();
   }
 
   private async resolveSession(req: IncomingMessage, client: ClientConnection, clientId: string): Promise<void> {
@@ -284,6 +284,20 @@ class WebSocketManager {
       authenticatedClients: authenticatedCount,
       subscriptions: subscriptionCounts,
     };
+  }
+
+  /** Stop heartbeat interval and close all client connections. */
+  destroy(): void {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    for (const [, client] of Array.from(this.clients.entries())) {
+      if (client.ws.readyState === WebSocket.OPEN) {
+        client.ws.close(1001, 'Server shutting down');
+      }
+    }
+    this.clients.clear();
   }
 }
 

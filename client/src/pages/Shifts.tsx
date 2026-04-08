@@ -8,6 +8,8 @@ import { CalendarDays, Copy, Wand2, CheckCircle2, History, AlertTriangle, Loader
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/useAuth";
+import { useEntitlements } from "@/lib/useEntitlements";
+import { LockedFeature } from "@/components/LockedFeature";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,6 +22,7 @@ export default function ShiftsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { hasFeature } = useEntitlements();
   const canManage = user && SHIFT_MANAGERS.includes(user.role);
 
   const { data: shifts, isLoading } = useQuery<Shift[]>({ queryKey: ["/api/shifts"] });
@@ -74,7 +77,7 @@ export default function ShiftsPage() {
     },
   });
 
-  const rows = Array.isArray(shifts) ? shifts : [];
+  const rows = shifts || [];
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const draftCount = rows.filter(s => s.status === 'draft').length;
   const publishedCount = rows.filter(s => s.status === 'published').length;
@@ -168,13 +171,15 @@ export default function ShiftsPage() {
           </div>
 
           {canManage && (
-            <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-start gap-3 mb-4">
-              <Wand2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <h4 className="text-sm font-semibold text-primary mb-1">AI Planning Suggestion</h4>
-                <p className="text-xs text-muted-foreground">Fairness index maintained at 94%. All slots covered. Consider adding backup for Friday PM slot.</p>
+            <LockedFeature locked={!hasFeature("staffing_recommendations")}>
+              <div className="bg-primary/10 border border-primary/20 rounded-lg p-3 flex items-start gap-3 mb-4">
+                <Wand2 className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-semibold text-primary mb-1">AI Planning Suggestion</h4>
+                  <p className="text-xs text-muted-foreground">Fairness index maintained at 94%. All slots covered. Consider adding backup for Friday PM slot.</p>
+                </div>
               </div>
-            </div>
+            </LockedFeature>
           )}
 
           {isLoading ? (
