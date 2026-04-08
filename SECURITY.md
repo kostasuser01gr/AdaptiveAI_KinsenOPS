@@ -76,8 +76,9 @@ Multiple rate limiters protect against abuse:
 | Auth | 15 min | 20 | Prevent brute force |
 | API | 1 min | 100 | General API protection |
 | AI Chat | 1 min | 10 | Prevent AI abuse |
-| Search | 1 min | 30 | Limit search queries |
-| Webhooks | 1 min | 30 | Limit webhook ingestion |
+| Search | 1 min | 30 | Limit search queries || Wash Queue Read | 1 min | 60 | Kiosk tablet polling |
+| Wash Queue Write | 1 min | 10 | Kiosk tablet submissions |
+| Evidence Upload | 1 min | 5 | Limit evidence uploads || Webhooks | 1 min | 30 | Limit webhook ingestion |
 
 Rate limiting uses user ID for authenticated requests and IP address for anonymous requests.
 
@@ -197,7 +198,7 @@ The platform includes features to support GDPR compliance:
 
 ## Security Checklist
 
-- [x] RLS enabled on all tables
+- [x] RLS enabled on 28 of 52 tables (remaining 24 use app-layer workspace isolation)
 - [x] Foreign keys properly indexed
 - [x] CSP headers without unsafe directives
 - [x] Rate limiting on all endpoints
