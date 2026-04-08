@@ -58,9 +58,10 @@ export function registerDocumentRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.put("/api/documents/upload/:key(*)", requireAuth, async (req, res, next) => {
+  app.put("/api/documents/upload/*key", requireAuth, async (req, res, next) => {
     try {
-      const key = String(req.params.key);
+      const keyParam = req.params.key;
+      const key = Array.isArray(keyParam) ? keyParam.join('/') : String(keyParam);
       if (!key || key.includes('..') || key.startsWith('/')) return res.status(400).json({ message: "Invalid key" });
       const filepath = path.resolve(LOCAL_UPLOAD_DIR, key);
       if (!filepath.startsWith(path.resolve(LOCAL_UPLOAD_DIR))) return res.status(400).json({ message: "Invalid key" });
@@ -78,9 +79,10 @@ export function registerDocumentRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.get("/api/documents/read/:key(*)", requireAuth, async (req, res, next) => {
+  app.get("/api/documents/read/*key", requireAuth, async (req, res, next) => {
     try {
-      const key = String(req.params.key);
+      const keyParam = req.params.key;
+      const key = Array.isArray(keyParam) ? keyParam.join('/') : String(keyParam);
       if (!key || key.includes('..') || key.startsWith('/')) return res.status(400).json({ message: "Invalid key" });
       const filepath = path.resolve(LOCAL_UPLOAD_DIR, key);
       if (!filepath.startsWith(path.resolve(LOCAL_UPLOAD_DIR))) return res.status(400).json({ message: "Invalid key" });
