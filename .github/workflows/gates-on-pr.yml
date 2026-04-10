@@ -86,6 +86,48 @@ jobs:
           path: artifacts/
           retention-days: 30
 
+  e2e:
+    name: E2E (G5)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: adaptiveai_closure_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adaptiveai_closure_test
+      SESSION_SECRET: closure-test-secret
+      NODE_ENV: development
+      SEED_DATABASE: "true"
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: bash scripts/ci/setup-toolchain.sh nodejs
+      - run: npx playwright install chromium
+      - run: bash scripts/ci/run-gates.sh G5
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-g5
+          path: |
+            artifacts/
+            e2e-report/
+          retention-days: 30
+
   coverage:
     name: Coverage (G6)
     runs-on: ubuntu-latest
@@ -155,7 +197,7 @@ jobs:
   gate-summary:
     name: Gate Summary
     if: always()
-    needs: [build, lint, typecheck, test, coverage, audit, sast, secrets]
+    needs: [build, lint, typecheck, test, e2e, coverage, audit, sast, secrets]
     runs-on: ubuntu-latest
     steps:
       - name: Check results
@@ -164,6 +206,7 @@ jobs:
           echo "Lint: ${{ needs.lint.result }}"
           echo "Typecheck: ${{ needs.typecheck.result }}"
           echo "Test: ${{ needs.test.result }}"
+          echo "E2E: ${{ needs.e2e.result }}"
           echo "Coverage: ${{ needs.coverage.result }}"
           echo "Audit: ${{ needs.audit.result }}"
           echo "SAST: ${{ needs.sast.result }}"
@@ -172,6 +215,7 @@ jobs:
                 "${{ needs.lint.result }}" != "success" || \
                 "${{ needs.typecheck.result }}" != "success" || \
                 "${{ needs.test.result }}" != "success" || \
+                "${{ needs.e2e.result }}" != "success" || \
                 "${{ needs.coverage.result }}" != "success" || \
                 "${{ needs.audit.result }}" != "success" || \
                 "${{ needs.sast.result }}" != "success" || \
