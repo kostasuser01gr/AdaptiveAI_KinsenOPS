@@ -6,28 +6,40 @@ import { ADMIN, loginUI, loginAPI } from "./helpers";
  * Uses both browser UI and API-assisted setup/cleanup for determinism.
  */
 
-const TEST_CHANNEL = {
-  name: `e2e-smoke-${Date.now()}`,
-  type: "public",
-  description: "Playwright E2E channel — auto-cleaned",
-};
-
 test.describe("Channels — CRUD flow", () => {
-  let channelId: number;
+  let channelId: number | undefined;
+  let apiContext: ReturnType<typeof loginAPI> extends Promise<infer R>
+    ? R
+    : never;
+
+  test.afterEach(async ({ request }) => {
+    // Guaranteed cleanup — archive even if the test failed mid-way
+    if (channelId !== undefined) {
+      await loginAPI(request, ADMIN);
+      await request.post(`/api/channels/${channelId}/archive`).catch(() => {});
+      channelId = undefined;
+    }
+  });
 
   test("create channel via API, verify in UI, send message, archive", async ({
     page,
     request,
   }) => {
+    const uniqueName = `e2e-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
     // — Setup: create channel via API for speed & determinism —
     await loginAPI(request, ADMIN);
     const createRes = await request.post("/api/channels", {
-      data: TEST_CHANNEL,
+      data: {
+        name: uniqueName,
+        type: "public",
+        description: "Playwright E2E channel — auto-cleaned",
+      },
     });
     expect(createRes.status()).toBe(201);
     const created = await createRes.json();
     channelId = created.id;
-    expect(created.name).toBe(TEST_CHANNEL.name);
+    expect(created.name).toBe(uniqueName);
     expect(created.slug).toBeTruthy();
 
     // — UI: login and navigate to channels —
@@ -51,23 +63,15 @@ test.describe("Channels — CRUD flow", () => {
       page.locator('[data-testid="input-channel-message"]'),
     ).toBeVisible({ timeout: 5_000 });
 
-    // Send a message
-    await page.fill(
-      '[data-testid="input-channel-message"]',
-      "E2E smoke message",
-    );
+    // Send a message with a unique payload to avoid matching stale data
+    const msgText = `E2E smoke ${uniqueName}`;
+    await page.fill('[data-testid="input-channel-message"]', msgText);
     await page.click('[data-testid="button-send-channel-message"]');
 
     // Verify message appears in the message list
-    await expect(page.getByText("E2E smoke message")).toBeVisible({
+    await expect(page.getByText(msgText)).toBeVisible({
       timeout: 5_000,
     });
-
-    // — Cleanup: archive the channel via API —
-    const archiveRes = await request.post(
-      `/api/channels/${channelId}/archive`,
-    );
-    expect(archiveRes.ok()).toBeTruthy();
   });
 });
 
