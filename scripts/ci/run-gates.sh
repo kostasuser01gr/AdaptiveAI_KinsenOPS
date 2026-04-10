@@ -80,6 +80,9 @@ run_named_gate() {
     G4)
       run_shell_gate "G4" "Tests" "npm test"
       ;;
+    G5)
+      run_shell_gate "G5" "E2E (Playwright)" "npx playwright test"
+      ;;
     G6)
       run_shell_gate "G6" "Coverage" "npx vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=lcov"
       ;;
@@ -128,7 +131,7 @@ TARGET="${1:-all}"
 
 if [ "$TARGET" = "all" ]; then
   failed=0
-  for gate in G1 G2 G3 G4 G6 G8 G9 G10; do
+  for gate in G1 G2 G3 G4 G5 G6 G8 G9 G10; do
     if ! run_named_gate "$gate"; then
       failed=1
     fi

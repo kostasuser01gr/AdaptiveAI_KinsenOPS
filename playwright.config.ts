@@ -17,4 +17,11 @@ export default defineConfig({
     },
   ],
   reporter: [["list"], ["html", { open: "never", outputFolder: "e2e-report" }]],
+  webServer: {
+    command:
+      'DATABASE_URL="postgresql://localhost:5432/adaptiveai_closure_test" SESSION_SECRET="closure-test-secret" NODE_ENV=development SEED_DATABASE=true npx tsx server/index.ts',
+    port: 5000,
+    reuseExistingServer: !process.env.CI,
+    timeout: 30_000,
+  },
 });
