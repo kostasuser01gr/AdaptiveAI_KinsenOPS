@@ -118,6 +118,7 @@ jobs:
           cache: npm
       - run: bash scripts/ci/setup-toolchain.sh nodejs
       - run: npx playwright install chromium
+      - run: npx drizzle-kit push --force
       - run: bash scripts/ci/run-gates.sh G5
       - if: always()
         uses: actions/upload-artifact@v7
