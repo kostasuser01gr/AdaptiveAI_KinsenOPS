@@ -79,7 +79,7 @@ export default function ChannelsPage() {
       {/* Channel sidebar */}
       <div className={`border-r flex flex-col bg-card/50 shrink-0 transition-all duration-200 ${sidebarCollapsed ? 'w-0 overflow-hidden border-0' : 'w-[260px]'} ${selectedChannel ? 'hidden md:flex' : 'flex'}`}>
         <div className="p-3 border-b flex items-center justify-between">
-          <h2 className="font-semibold text-sm flex items-center gap-2">
+          <h2 className="font-semibold text-sm flex items-center gap-2" data-testid="text-channels-title">
             <MessageSquare className="h-4 w-4 text-primary" /> Channels
           </h2>
           <div className="flex items-center gap-1">
@@ -95,6 +95,7 @@ export default function ChannelsPage() {
               <button
                 key={ch.id}
                 onClick={() => selectChannel(ch)}
+                data-testid={`channel-item-${ch.id}`}
                 className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors text-left ${
                   selectedChannel?.id === ch.id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted/50 text-foreground/80'
                 }`}
@@ -105,7 +106,7 @@ export default function ChannelsPage() {
               </button>
             ))}
             {channelList.length === 0 && (
-              <p className="px-3 py-8 text-sm text-muted-foreground text-center">No channels yet. Create one!</p>
+              <p className="px-3 py-8 text-sm text-muted-foreground text-center" data-testid="text-no-channels">No channels yet. Create one!</p>
             )}
           </div>
         </ScrollArea>
@@ -165,7 +166,7 @@ function CreateChannelDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7"><Plus className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" data-testid="button-create-channel"><Plus className="h-4 w-4" /></Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
@@ -175,7 +176,7 @@ function CreateChannelDialog() {
         <div className="space-y-4 mt-2">
           <div className="space-y-2">
             <Label>Name</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. fleet-updates" />
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. fleet-updates" data-testid="input-channel-name" />
           </div>
           <div className="space-y-2">
             <Label>Type</Label>
@@ -193,7 +194,7 @@ function CreateChannelDialog() {
             <Label>Description (optional)</Label>
             <Input value={description} onChange={e => setDescription(e.target.value)} placeholder="What's this channel about?" />
           </div>
-          <Button onClick={() => createMutation.mutate()} disabled={!name.trim() || createMutation.isPending} className="w-full">
+          <Button onClick={() => createMutation.mutate()} disabled={!name.trim() || createMutation.isPending} className="w-full" data-testid="button-submit-channel">
             {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Hash className="h-4 w-4 mr-2" />}
             Create Channel
           </Button>
@@ -348,8 +349,9 @@ function ChannelMessageArea({ channel, onBack, wsSend }: { channel: Channel; onB
               onKeyDown={handleKeyDown}
               placeholder={`Message #${channel.name}...`}
               className="flex-1"
+              data-testid="input-channel-message"
             />
-            <Button onClick={handleSend} disabled={!message.trim() || sendMutation.isPending} size="icon">
+            <Button onClick={handleSend} disabled={!message.trim() || sendMutation.isPending} size="icon" data-testid="button-send-channel-message">
               {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
