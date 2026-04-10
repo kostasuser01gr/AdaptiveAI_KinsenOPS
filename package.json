@@ -15,7 +15,9 @@
     "db:push": "drizzle-kit push",
     "lint": "eslint server/ shared/ client/src/lib/ client/src/App.tsx client/src/main.tsx tests/",
     "lint:fix": "eslint server/ shared/ client/src/lib/ client/src/App.tsx client/src/main.tsx tests/ --fix",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
@@ -89,6 +91,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.59.1",
     "@replit/vite-plugin-cartographer": "^0.4.10",
     "@replit/vite-plugin-dev-banner": "^0.1.1",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.4",

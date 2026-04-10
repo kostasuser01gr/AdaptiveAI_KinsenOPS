@@ -24,3 +24,7 @@ artifacts/
 BLACK_VAULT_HARDENING_REPORT.md
 .black-vault/
 *.bak
+
+# Playwright
+e2e-report/
+test-results/
