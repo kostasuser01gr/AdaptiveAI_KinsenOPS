@@ -538,7 +538,7 @@ describe("Repair order state machine — auth verification", () => {
     // Add initial states themselves (they are valid starting points)
     allReachable.add("open");
 
-    for (const [ws, ro] of Object.entries(WORKSHOP_TO_REPAIR_ORDER_STATUS)) {
+    for (const [_ws, ro] of Object.entries(WORKSHOP_TO_REPAIR_ORDER_STATUS)) {
       expect(allReachable.has(ro) || ro === "open").toBe(true);
     }
   });

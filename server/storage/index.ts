@@ -28,6 +28,11 @@ import { CapabilityStorage } from "./capabilities.js";
 import { StationAssignmentStorage } from "./stationAssignments.js";
 import { VehicleEventStorage } from "./vehicleEvents.js";
 import { WorkshopJobStorage } from "./workshopJobs.js";
+import { PositionStorage } from "./positions.js";
+import { ChannelStorage } from "./channels.js";
+import { AppGraphStorage } from "./appGraph.js";
+import { AiUsageStorage } from "./aiUsage.js";
+import { ExtensionStorage } from "./extensions.js";
 
 // Instantiate each domain
 const userStorage = new UserStorage();
@@ -54,6 +59,11 @@ const capabilityStorage = new CapabilityStorage();
 const stationAssignmentStorage = new StationAssignmentStorage();
 const vehicleEventStorage = new VehicleEventStorage();
 const workshopJobStorage = new WorkshopJobStorage();
+const positionStorage = new PositionStorage();
+const channelStorage = new ChannelStorage();
+const appGraphStorage = new AppGraphStorage();
+const aiUsageStorage = new AiUsageStorage();
+const extensionStorage = new ExtensionStorage();
 
 /**
  * Composed DatabaseStorage — delegates every call to the matching domain module.
@@ -332,6 +342,74 @@ class DatabaseStorage implements IStorage {
   getWorkshopJob = workshopJobStorage.getWorkshopJob.bind(workshopJobStorage);
   updateWorkshopJob = workshopJobStorage.updateWorkshopJob.bind(workshopJobStorage);
   linkWorkshopJobToRepairOrder = workshopJobStorage.linkWorkshopJobToRepairOrder.bind(workshopJobStorage);
+
+  // Station positions (Phase 5)
+  getStationPositions = positionStorage.getStationPositions.bind(positionStorage);
+  getStationPosition = positionStorage.getStationPosition.bind(positionStorage);
+  createStationPosition = positionStorage.createStationPosition.bind(positionStorage);
+  updateStationPosition = positionStorage.updateStationPosition.bind(positionStorage);
+  deleteStationPosition = positionStorage.deleteStationPosition.bind(positionStorage);
+
+  // Position assignments
+  getPositionAssignments = positionStorage.getPositionAssignments.bind(positionStorage);
+  getActiveAssignments = positionStorage.getActiveAssignments.bind(positionStorage);
+  getVehicleAssignment = positionStorage.getVehicleAssignment.bind(positionStorage);
+  createPositionAssignment = positionStorage.createPositionAssignment.bind(positionStorage);
+  releasePositionAssignment = positionStorage.releasePositionAssignment.bind(positionStorage);
+
+  // Vehicle transfers
+  getVehicleTransfers = positionStorage.getVehicleTransfers.bind(positionStorage);
+  getVehicleTransfer = positionStorage.getVehicleTransfer.bind(positionStorage);
+  createVehicleTransfer = positionStorage.createVehicleTransfer.bind(positionStorage);
+  updateVehicleTransfer = positionStorage.updateVehicleTransfer.bind(positionStorage);
+
+  // Chat channels (Phase 5)
+  getChatChannels = channelStorage.getChatChannels.bind(channelStorage);
+  getChatChannel = channelStorage.getChatChannel.bind(channelStorage);
+  getChatChannelBySlug = channelStorage.getChatChannelBySlug.bind(channelStorage);
+  createChatChannel = channelStorage.createChatChannel.bind(channelStorage);
+  updateChatChannel = channelStorage.updateChatChannel.bind(channelStorage);
+  archiveChatChannel = channelStorage.archiveChatChannel.bind(channelStorage);
+
+  // Channel members
+  getChannelMembers = channelStorage.getChannelMembers.bind(channelStorage);
+  getUserChannels = channelStorage.getUserChannels.bind(channelStorage);
+  addChannelMember = channelStorage.addChannelMember.bind(channelStorage);
+  removeChannelMember = channelStorage.removeChannelMember.bind(channelStorage);
+  updateChannelMemberReadState = channelStorage.updateChannelMemberReadState.bind(channelStorage);
+
+  // Channel messages
+  getChannelMessages = channelStorage.getChannelMessages.bind(channelStorage);
+  getChannelMessage = channelStorage.getChannelMessage.bind(channelStorage);
+  createChannelMessage = channelStorage.createChannelMessage.bind(channelStorage);
+  updateChannelMessage = channelStorage.updateChannelMessage.bind(channelStorage);
+  togglePinMessage = channelStorage.togglePinMessage.bind(channelStorage);
+  getPinnedMessages = channelStorage.getPinnedMessages.bind(channelStorage);
+
+  // Channel reactions
+  getMessageReactions = channelStorage.getMessageReactions.bind(channelStorage);
+  addReaction = channelStorage.addReaction.bind(channelStorage);
+  removeReaction = channelStorage.removeReaction.bind(channelStorage);
+
+  // App Graph (Phase 5)
+  getAppGraphVersions = appGraphStorage.getAppGraphVersions.bind(appGraphStorage);
+  getAppGraphVersion = appGraphStorage.getAppGraphVersion.bind(appGraphStorage);
+  getLatestAppGraph = appGraphStorage.getLatestAppGraph.bind(appGraphStorage);
+  createAppGraphVersion = appGraphStorage.createAppGraphVersion.bind(appGraphStorage);
+  applyAppGraphVersion = appGraphStorage.applyAppGraphVersion.bind(appGraphStorage);
+  rollbackAppGraphVersion = appGraphStorage.rollbackAppGraphVersion.bind(appGraphStorage);
+
+  // AI model usage (Phase 5)
+  getAiModelUsage = aiUsageStorage.getAiModelUsage.bind(aiUsageStorage);
+  createAiModelUsage = aiUsageStorage.createAiModelUsage.bind(aiUsageStorage);
+
+  // Installed extensions (Phase 5)
+  getInstalledExtensions = extensionStorage.getInstalledExtensions.bind(extensionStorage);
+  getInstalledExtension = extensionStorage.getInstalledExtension.bind(extensionStorage);
+  getInstalledExtensionBySlug = extensionStorage.getInstalledExtensionBySlug.bind(extensionStorage);
+  installExtension = extensionStorage.installExtension.bind(extensionStorage);
+  updateExtension = extensionStorage.updateExtension.bind(extensionStorage);
+  uninstallExtension = extensionStorage.uninstallExtension.bind(extensionStorage);
 }
 
 export const storage = new DatabaseStorage();

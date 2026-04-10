@@ -200,7 +200,7 @@ export function registerImportRoutes(app: Express) {
       const targetTable = (existing as { targetTable?: string }).targetTable || 'vehicles';
 
       let applied = 0;
-      let errors: string[] = [];
+      const errors: string[] = [];
 
       if (targetTable === 'vehicles') {
         const mappingMap = new Map(existing.mappings.map(m => [m.source, m.target]));

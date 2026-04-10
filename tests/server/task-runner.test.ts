@@ -12,7 +12,7 @@
  * 8. Migrated SLA task definition
  * 9. Observability state surface
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { TaskRunner } from "../../server/tasks/runner.js";
 import type { TaskDefinition, TaskState } from "../../server/tasks/types.js";
 

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   FileUp, Wand2, Database, AlertCircle, FileSpreadsheet, Upload, CheckCircle2,
-  Loader2, Table2, ArrowRight, ChevronDown, ChevronRight, X, Eye, Download,
+  Loader2, Table2, ArrowRight, X, Eye, Download,
   RotateCcw, Trash2, Brain
 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
@@ -62,7 +62,7 @@ export default function ImportsPage() {
       try {
         await apiRequest('POST', `/api/imports/${data.id}/process`);
         queryClient.invalidateQueries({ queryKey: ['/api/imports'] });
-      } catch {}
+      } catch {/* no-op */}
     },
     onError: () => toast({ title: "Upload Failed", description: "Could not create import job.", variant: "destructive" }),
   });
@@ -337,7 +337,7 @@ export default function ImportsPage() {
                     <h4 className="text-sm font-semibold flex items-center gap-2">
                       <Table2 className="h-4 w-4 text-primary" /> Diff Preview
                     </h4>
-                    <div className="grid grid-cols-4 gap-3 text-center">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                       <div className="p-3 rounded-lg bg-green-500/10 border border-green-500/20">
                         <div className="text-2xl font-bold text-green-400">+{selectedImport.diffs.added}</div>
                         <div className="text-xs text-muted-foreground">New Records</div>

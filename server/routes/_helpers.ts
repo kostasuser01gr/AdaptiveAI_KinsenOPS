@@ -2,12 +2,11 @@
  * Shared constants, schemas, and utility functions used across route modules.
  * Extracted from the monolithic routes.ts during Phase 4.0 route split.
  */
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { wsManager } from "../websocket.js";
-import { metricsCollector } from "../observability/metrics.js";
 
 // ─── CONSTANTS ───
 export const SHIFT_MANAGERS = ["admin", "coordinator", "supervisor"];

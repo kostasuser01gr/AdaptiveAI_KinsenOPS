@@ -19,7 +19,6 @@ import { webhookLimiter } from "../middleware/rate-limiter.js";
 import { wsManager } from "../websocket.js";
 import {
   normalizeBatch,
-  normalizeEvent,
   validatePayloadSize,
   validateTimestamp,
   type RawTelematicsPayload,

@@ -5,8 +5,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Droplets, CheckCircle2, Undo2, Camera, Clock, Zap, AlertTriangle, Sun, Hand, BarChart3, TrendingUp, Shield } from 'lucide-react';
+import { Droplets, CheckCircle2, Undo2, Camera, Zap, AlertTriangle, Sun, Hand, BarChart3, TrendingUp, Shield } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import PlateScanner from "@/components/scanner/PlateScanner";
 
 const WASH_TYPES = ['Quick Wash', 'Full Detail', 'Interior Only', 'Exterior Only'];
 const NUM_PAD = ['1','2','3','4','5','6','7','8','9','0','-','⌫'];
@@ -128,6 +129,8 @@ export default function WasherRegister() {
       )}
 
       <div className={`p-4 border-b shrink-0 space-y-3 ${sunMode ? 'bg-gray-50' : 'bg-muted/20'}`}>
+        <PlateScanner onPlateDetected={(plate) => setPlates(plate)} sunMode={sunMode} alwaysOn />
+
         <div className={`rounded-xl p-4 border shadow-sm ${sunMode ? 'bg-white border-gray-300' : 'bg-background'}`}>
           <input value={plates} onChange={(e) => setPlates(e.target.value.toUpperCase())}
             placeholder="ΠΙΝΑΚΙΔΑ / PLATE"

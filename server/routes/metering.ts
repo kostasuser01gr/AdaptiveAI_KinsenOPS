@@ -2,7 +2,6 @@
  * Usage metering admin routes — reporting & event inspection (Phase 4.2A).
  */
 import type { Express } from "express";
-import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 

@@ -4,7 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Car, QrCode, Shield, Clock, CheckCircle2 } from 'lucide-react';
-import { Badge } from "@/components/ui/badge";
 
 export default function CustomerEntry() {
   const [resNumber, setResNumber] = useState('');

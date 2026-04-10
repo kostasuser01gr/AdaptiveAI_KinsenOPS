@@ -5,8 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, TrendingUp, TrendingDown, Activity, Car, Droplets, Users, Clock, Zap, AlertTriangle, Brain, Download, ArrowRight, Target, Shield } from 'lucide-react';
-import { useAuth } from "@/lib/useAuth";
+import { BarChart3, TrendingUp, TrendingDown, Activity, Car, Droplets, Users, Clock, AlertTriangle, Brain, Download, ArrowRight, Target, Shield } from 'lucide-react';
 import { useEntitlements } from "@/lib/useEntitlements";
 import { LockedFeature } from "@/components/LockedFeature";
 
@@ -49,7 +48,6 @@ function StatCard({ title, value, subtitle, icon: Icon, color = "text-primary", 
 }
 
 export default function AnalyticsPage() {
-  const { user } = useAuth();
   const { hasFeature } = useEntitlements();
   const [trendDays, setTrendDays] = React.useState(30);
 

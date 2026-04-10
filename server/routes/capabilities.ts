@@ -2,11 +2,9 @@
  * Capability admin routes — inspect, override, and manage permissions (Phase 4.2A).
  */
 import type { Express } from "express";
-import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 import {
-  CAPABILITIES,
   CAPABILITY_CATALOG,
   isValidCapability,
   resolveAllCapabilities,

@@ -1,13 +1,12 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Car, Users, Droplets, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { CalendarDays, Car, Users, Droplets, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const HOURS = Array.from({ length: 14 }, (_, i) => i + 6);
+const _HOURS = Array.from({ length: 14 }, (_, i) => i + 6);
 
 export default function CalendarPage() {
   const { data: shiftsData } = useQuery({ queryKey: ["/api/shifts"] });

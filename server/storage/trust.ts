@@ -1,4 +1,4 @@
-import { db, eq, desc, lt, sql , wsFilter, wsInsert, and} from "./base.js";
+import { db, desc, lt , wsFilter, wsInsert, and} from "./base.js";
 import { auditLog, type InsertAuditLog } from "../../shared/schema.js";
 
 export class TrustStorage {

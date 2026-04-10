@@ -34,6 +34,11 @@ import { registerCapabilityRoutes } from "./routes/capabilities.js";
 import { registerStationAssignmentRoutes } from "./routes/stationAssignments.js";
 import { registerTelematicsRoutes } from "./routes/telematics.js";
 import { registerWorkshopRoutes } from "./routes/workshop.js";
+import { registerPositionRoutes } from "./routes/positions.js";
+import { registerChannelRoutes } from "./routes/channels.js";
+import { registerAppGraphRoutes } from "./routes/appGraph.js";
+import { registerExtensionRoutes } from "./routes/extensions.js";
+import { registerModelGatewayRoutes } from "./routes/modelGateway.js";
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   setupAuth(app);
@@ -76,6 +81,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   registerStationAssignmentRoutes(app);
   registerTelematicsRoutes(app);
   registerWorkshopRoutes(app);
+  registerPositionRoutes(app);
+  registerChannelRoutes(app);
+  registerAppGraphRoutes(app);
+  registerExtensionRoutes(app);
+  registerModelGatewayRoutes(app);
 
   return httpServer;
 }

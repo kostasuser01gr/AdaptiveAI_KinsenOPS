@@ -1,19 +1,18 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { Zap, Plus, Play, Pause, Trash2, RefreshCw, AlertTriangle, CheckCircle2, Clock, ArrowRight, Lock, Globe, Eye, FlaskConical, History, Shield } from 'lucide-react';
+import { Zap, Plus, Play, Trash2, RefreshCw, AlertTriangle, CheckCircle2, Clock, ArrowRight, Lock, Globe, FlaskConical, History } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/lib/useAuth";
 import { useEntitlements } from "@/lib/useEntitlements";
 import { LockedFeature } from "@/components/LockedFeature";
 
@@ -43,7 +42,6 @@ const actionLabels: Record<string, string> = {
 export default function AutomationsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { user } = useAuth();
   const { hasFeature } = useEntitlements();
   const canExecute = hasFeature("automation_execution");
   const canAiDraft = hasFeature("ai_automation_drafting");
@@ -96,7 +94,7 @@ export default function AutomationsPage() {
   const parseNaturalLanguage = () => {
     const lower = nlInput.toLowerCase();
     let trigger = 'qc_fail';
-    let name = nlInput;
+    const name = nlInput;
     if (lower.includes('sla')) trigger = 'sla_warning';
     else if (lower.includes('upload') || lower.includes('customer')) trigger = 'customer_upload';
     else if (lower.includes('return')) trigger = 'vehicle_return';
@@ -218,7 +216,7 @@ export default function AutomationsPage() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Card className="glass-panel"><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{allRules.length}</p><p className="text-xs text-muted-foreground">Total Rules</p></CardContent></Card>
             <Card className="glass-panel"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-green-400">{activeCount}</p><p className="text-xs text-muted-foreground">Active</p></CardContent></Card>
             <Card className="glass-panel"><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-muted-foreground">{totalExecutions}</p><p className="text-xs text-muted-foreground">Executions</p></CardContent></Card>

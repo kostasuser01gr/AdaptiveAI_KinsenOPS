@@ -1,7 +1,7 @@
 /**
  * Workshop jobs storage — external workshop linkage (Phase 4.2B).
  */
-import { db, eq, and, desc, sql , wsFilter, wsInsert} from "./base.js";
+import { db, eq, and, desc, wsFilter, wsInsert} from "./base.js";
 import {
   workshopJobs,
   type InsertWorkshopJob,

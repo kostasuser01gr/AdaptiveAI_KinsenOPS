@@ -45,7 +45,7 @@ function StationCard({ station, data }: { station: string; data: any }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-4 gap-3 text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
           <div><p className="text-lg font-bold text-green-400">{data.ready}</p><p className="text-[10px] text-muted-foreground">Ready</p></div>
           <div><p className="text-lg font-bold text-blue-400">{data.washing}</p><p className="text-[10px] text-muted-foreground">Washing</p></div>
           <div><p className="text-lg font-bold text-yellow-400">{data.maintenance}</p><p className="text-[10px] text-muted-foreground">Repair</p></div>

@@ -33,6 +33,8 @@ const VehicleIntelligencePage = lazy(() => import("@/pages/VehicleIntelligence")
 const WorkspaceMemoryPage = lazy(() => import("@/pages/WorkspaceMemory"));
 const TrustConsolePage = lazy(() => import("@/pages/TrustConsole"));
 const ProposalsPage = lazy(() => import("@/pages/Proposals"));
+const ChannelsPage = lazy(() => import("@/pages/Channels"));
+const AppBuilderPage = lazy(() => import("@/pages/AppBuilder"));
 const WasherLayout = lazy(() => import("@/pages/washer/WasherLayout"));
 const WasherRegister = lazy(() => import("@/pages/washer/WasherRegister"));
 const WasherChat = lazy(() => import("@/pages/washer/WasherChat"));
@@ -45,6 +47,7 @@ import { AppProvider } from "@/lib/AppContext";
 import { useAuth } from "@/lib/useAuth";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 interface EBState { hasError: boolean; error?: Error }
@@ -182,6 +185,8 @@ function Router() {
       <Route path="/workspace-memory"><StaffRoute><WorkspaceMemoryPage /></StaffRoute></Route>
       <Route path="/trust"><StaffRoute><TrustConsolePage /></StaffRoute></Route>
       <Route path="/proposals"><StaffRoute><ProposalsPage /></StaffRoute></Route>
+      <Route path="/channels"><StaffRoute><ChannelsPage /></StaffRoute></Route>
+      <Route path="/app-builder"><StaffRoute><AppBuilderPage /></StaffRoute></Route>
       <Route path="/settings"><StaffRoute><SettingsPage /></StaffRoute></Route>
       <Route path="/shortcuts"><StaffRoute><ShortcutsPage /></StaffRoute></Route>
       <Route path="/knowledge"><StaffRoute><KnowledgeBasePage /></StaffRoute></Route>
@@ -204,6 +209,7 @@ function App() {
           <ErrorBoundary>
             <Router />
           </ErrorBoundary>
+          <InstallPrompt />
           <Toaster />
         </TooltipProvider>
       </AppProvider>

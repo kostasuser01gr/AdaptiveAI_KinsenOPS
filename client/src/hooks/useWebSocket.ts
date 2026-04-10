@@ -1,5 +1,5 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { queryClient } from '@/lib/queryClient';
 
 type WSStatus = 'connecting' | 'connected' | 'disconnected';
 
@@ -15,142 +15,210 @@ interface WSMessage {
 const PING_INTERVAL = 25_000;
 const MAX_BACKOFF = 30_000;
 
-/**
- * Singleton WebSocket manager for the app.
- * Exposes connection status and handles auto-reconnect with bounded backoff.
- */
-export function useWebSocket(channels: string[] = []) {
-  const queryClient = useQueryClient();
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pingTimer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const backoff = useRef(1000);
-  const mountedRef = useRef(true);
-  const [status, setStatus] = useState<WSStatus>('disconnected');
+// ─── Module-level singleton state ────────────────────────────────────────────
+// Exactly one WebSocket connection shared by all useWebSocket() callers.
 
-  const channelsRef = useRef(channels);
-  channelsRef.current = channels;
+let ws: WebSocket | null = null;
+let wsStatus: WSStatus = 'disconnected';
+let backoff = 1000;
+let pingTimer: ReturnType<typeof setInterval> | undefined;
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+let consumerCount = 0; // how many hook instances are alive
 
-  const cleanup = useCallback(() => {
-    if (pingTimer.current) clearInterval(pingTimer.current);
-    if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-    if (wsRef.current) {
-      wsRef.current.onopen = null;
-      wsRef.current.onclose = null;
-      wsRef.current.onmessage = null;
-      wsRef.current.onerror = null;
-      wsRef.current.close();
-      wsRef.current = null;
+// Ref-counted channel subscriptions: channel → number of hook-instances requesting it
+const channelRefs = new Map<string, number>();
+// All active hook status-listeners (so they can re-render on status change)
+const statusListeners = new Set<(s: WSStatus) => void>();
+
+function setGlobalStatus(s: WSStatus) {
+  wsStatus = s;
+  for (const fn of statusListeners) fn(s);
+}
+
+function sendRaw(payload: Record<string, unknown>) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+function subscribeChannel(ch: string) {
+  const prev = channelRefs.get(ch) ?? 0;
+  channelRefs.set(ch, prev + 1);
+  if (prev === 0) sendRaw({ type: 'subscribe', channel: ch }); // first requester
+}
+
+function unsubscribeChannel(ch: string) {
+  const prev = channelRefs.get(ch) ?? 1;
+  if (prev <= 1) {
+    channelRefs.delete(ch);
+    sendRaw({ type: 'unsubscribe', channel: ch });
+  } else {
+    channelRefs.set(ch, prev - 1);
+  }
+}
+
+function cleanupConnection() {
+  if (pingTimer) { clearInterval(pingTimer); pingTimer = undefined; }
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = undefined; }
+  if (ws) {
+    ws.onopen = null;
+    ws.onclose = null;
+    ws.onmessage = null;
+    ws.onerror = null;
+    ws.close();
+    ws = null;
+  }
+}
+
+function scheduleReconnect() {
+  if (consumerCount <= 0) return; // no one listening — don't reconnect
+  const delay = Math.min(backoff + Math.random() * 500, MAX_BACKOFF);
+  backoff = Math.min(backoff * 2, MAX_BACKOFF);
+  reconnectTimer = setTimeout(connect, delay);
+}
+
+function connect() {
+  if (consumerCount <= 0) return;
+  cleanupConnection();
+
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const socket = new WebSocket(`${protocol}//${window.location.host}/ws`);
+  ws = socket;
+  setGlobalStatus('connecting');
+
+  socket.onopen = () => {
+    setGlobalStatus('connected');
+    backoff = 1000;
+    // Re-subscribe all currently requested channels
+    for (const ch of channelRefs.keys()) {
+      sendRaw({ type: 'subscribe', channel: ch });
     }
+    // Keep-alive ping
+    pingTimer = setInterval(() => {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, PING_INTERVAL);
+  };
+
+  socket.onmessage = (event) => {
+    try {
+      handleServerMessage(JSON.parse(event.data) as WSMessage);
+    } catch { /* ignore non-JSON frames */ }
+  };
+
+  socket.onclose = () => {
+    setGlobalStatus('disconnected');
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = undefined; }
+    scheduleReconnect();
+  };
+
+  socket.onerror = () => { /* onclose fires after onerror; reconnect handled there */ };
+}
+
+function handleServerMessage(msg: WSMessage) {
+  switch (msg.type) {
+    case 'vehicle_update':
+    case 'vehicles_changed':
+      queryClient.invalidateQueries({ queryKey: ['/api/vehicles'] });
+      break;
+    case 'wash_queue_update':
+    case 'wash_changed':
+      queryClient.invalidateQueries({ queryKey: ['/api/wash-queue'] });
+      break;
+    case 'notification':
+    case 'notifications_changed':
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
+      break;
+    case 'activity_update':
+    case 'activity_changed':
+      queryClient.invalidateQueries({ queryKey: ['/api/activity-feed'] });
+      break;
+    case 'chat_message':
+      queryClient.invalidateQueries({ queryKey: ['/api/entity-rooms'] });
+      break;
+    case 'channel_message':
+    case 'channel_message_edited':
+    case 'message_pinned':
+    case 'message_unpinned':
+      queryClient.invalidateQueries({ queryKey: ['/api/channel-messages'] });
+      break;
+    case 'member_joined':
+    case 'member_left':
+      queryClient.invalidateQueries({ queryKey: ['/api/channels'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/channel-members'] });
+      break;
+    case 'position_assigned':
+    case 'position_released':
+      queryClient.invalidateQueries({ queryKey: ['/api/position-assignments'] });
+      break;
+    case 'transfer_created':
+    case 'transfer_updated':
+      queryClient.invalidateQueries({ queryKey: ['/api/transfers'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/vehicles'] });
+      break;
+    case 'pong':
+    case 'connected':
+    case 'auth_result':
+      break;
+    default:
+      break;
+  }
+}
+
+// ─── Hook: thin wrapper over the singleton ───────────────────────────────────
+// Each caller declares which channels it needs. Ref-counting ensures the
+// connection stays open while at least one consumer exists, and channel
+// subscriptions are aggregated across all callers.
+
+export function useWebSocket(channels: string[] = []) {
+  const [status, setStatus] = useState<WSStatus>(wsStatus);
+  const prevChannels = useRef<string[]>([]);
+
+  // Register this hook instance as a consumer
+  useEffect(() => {
+    consumerCount++;
+    // Start connection if this is the first consumer
+    if (consumerCount === 1 && (!ws || ws.readyState === WebSocket.CLOSED)) {
+      connect();
+    }
+    // Listen for status changes
+    statusListeners.add(setStatus);
+    // Sync current status immediately
+    setStatus(wsStatus);
+
+    return () => {
+      statusListeners.delete(setStatus);
+      consumerCount--;
+      if (consumerCount <= 0) {
+        cleanupConnection();
+        setGlobalStatus('disconnected');
+      }
+    };
   }, []);
 
-  const connect = useCallback(() => {
-    if (!mountedRef.current) return;
-    cleanup();
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
-    wsRef.current = ws;
-    setStatus('connecting');
-
-    ws.onopen = () => {
-      if (!mountedRef.current) return;
-      setStatus('connected');
-      backoff.current = 1000;
-
-      // Subscribe to channels
-      for (const ch of channelsRef.current) {
-        ws.send(JSON.stringify({ type: 'subscribe', channel: ch }));
-      }
-
-      // Client-side ping to keep connection alive through proxies
-      pingTimer.current = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }));
-        }
-      }, PING_INTERVAL);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg: WSMessage = JSON.parse(event.data);
-        handleServerMessage(msg);
-      } catch {
-        // ignore non-JSON frames
-      }
-    };
-
-    ws.onclose = () => {
-      if (!mountedRef.current) return;
-      setStatus('disconnected');
-      if (pingTimer.current) clearInterval(pingTimer.current);
-      scheduleReconnect();
-    };
-
-    ws.onerror = () => {
-      // onclose will fire after onerror; reconnect handled there
-    };
-  }, [cleanup]);
-
-  const scheduleReconnect = useCallback(() => {
-    if (!mountedRef.current) return;
-    const delay = Math.min(backoff.current + Math.random() * 500, MAX_BACKOFF);
-    backoff.current = Math.min(backoff.current * 2, MAX_BACKOFF);
-    reconnectTimer.current = setTimeout(() => {
-      if (mountedRef.current) connect();
-    }, delay);
-  }, [connect]);
-
-  const handleServerMessage = useCallback((msg: WSMessage) => {
-    // Map WS event types to query key invalidation
-    switch (msg.type) {
-      case 'vehicle_update':
-      case 'vehicles_changed':
-        queryClient.invalidateQueries({ queryKey: ['/api/vehicles'] });
-        break;
-      case 'wash_queue_update':
-      case 'wash_changed':
-        queryClient.invalidateQueries({ queryKey: ['/api/wash-queue'] });
-        break;
-      case 'notification':
-      case 'notifications_changed':
-        queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-        break;
-      case 'activity_update':
-      case 'activity_changed':
-        queryClient.invalidateQueries({ queryKey: ['/api/activity'] });
-        break;
-      case 'chat_message':
-        queryClient.invalidateQueries({ queryKey: ['/api/rooms'] });
-        break;
-      case 'pong':
-      case 'connected':
-      case 'auth_result':
-        // internal, no invalidation needed
-        break;
-      default:
-        // Unknown event types: broad invalidation to stay fresh
-        break;
-    }
-  }, [queryClient]);
-
+  // Manage channel subscriptions with ref-counting
   useEffect(() => {
-    mountedRef.current = true;
-    connect();
+    const prev = new Set(prevChannels.current);
+    const next = new Set(channels);
+
+    // Subscribe to newly requested channels
+    for (const ch of next) {
+      if (!prev.has(ch)) subscribeChannel(ch);
+    }
+    // Unsubscribe from channels no longer needed by this hook instance
+    for (const ch of prev) {
+      if (!next.has(ch)) unsubscribeChannel(ch);
+    }
+    prevChannels.current = channels;
+
     return () => {
-      mountedRef.current = false;
-      cleanup();
+      // On unmount, release all channels this instance held
+      for (const ch of channels) unsubscribeChannel(ch);
     };
-  }, [connect, cleanup]);
+  }, [channels.join(',')]);   
 
-  // Re-subscribe when channels change
-  useEffect(() => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    for (const ch of channels) {
-      ws.send(JSON.stringify({ type: 'subscribe', channel: ch }));
-    }
-  }, [channels]);
+  const send = useCallback((msg: Record<string, unknown>) => sendRaw(msg), []);
 
-  return { status };
+  return { status, send };
 }

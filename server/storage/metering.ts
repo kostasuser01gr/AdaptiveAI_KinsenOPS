@@ -9,7 +9,6 @@ import {
   type UsageEvent,
   type InsertUsageEvent,
   type UsageDailyRollup,
-  type InsertUsageDailyRollup,
 } from "../../shared/schema.js";
 
 export class MeteringStorage {

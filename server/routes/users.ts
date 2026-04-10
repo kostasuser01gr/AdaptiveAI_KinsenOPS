@@ -43,7 +43,8 @@ export function registerUserRoutes(app: Express) {
   app.get("/api/user-preferences", requireAuth, async (req, res, next) => {
     try {
       const userId = (req.user as Express.User).id;
-      res.json(await storage.getUserPreferences(userId));
+      const category = typeof req.query.category === 'string' ? req.query.category : undefined;
+      res.json(await storage.getUserPreferences(userId, category));
     } catch (e) { next(e); }
   });
 

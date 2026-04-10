@@ -1,17 +1,15 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Users, Car, Clock, AlertTriangle, Send, Bot, Plus, Shield, Zap, Eye, CheckSquare, FileText, ArrowRight, ListTodo, Bell, Bookmark } from 'lucide-react';
+import { MessageSquare, Users, Car, Clock, AlertTriangle, Send, Bot, Plus, Shield, Eye, CheckSquare, FileText, ArrowRight, ListTodo, Bell, Bookmark } from 'lucide-react';
 import { useAuth } from "@/lib/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 
 export default function WarRoomPage() {
   const queryClient = useQueryClient();

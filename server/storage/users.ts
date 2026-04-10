@@ -1,9 +1,9 @@
-import { db, eq, desc, and , wsFilter, wsInsert} from "./base.js";
+import { db, eq, and , wsFilter, wsInsert} from "./base.js";
 import {
-  users, type User, type InsertUser,
-  userPreferences, type UserPreference, type InsertUserPreference,
-  customActions, type CustomAction, type InsertCustomAction,
-  stations, type Station, type InsertStation,
+  users, type InsertUser,
+  userPreferences, type InsertUserPreference,
+  customActions, type InsertCustomAction,
+  stations, type InsertStation,
 } from "../../shared/schema.js";
 
 export class UserStorage {

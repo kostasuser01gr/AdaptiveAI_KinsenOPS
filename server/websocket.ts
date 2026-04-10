@@ -9,6 +9,9 @@ import { storage } from "./storage.js";
 
 const PUBLIC_CHANNELS = new Set(['vehicles', 'wash-queue', 'activity', 'notifications']);
 
+// Channel patterns that require authentication (regex match)
+const _AUTH_CHANNEL_PREFIXES = ['channel:'];
+
 interface ClientConnection {
   ws: WebSocket;
   userId?: number;
@@ -161,7 +164,7 @@ class WebSocketManager {
     }
   }
 
-  private handleMessage(clientId: string, message: { type: string; [key: string]: unknown }): void {
+  private async handleMessage(clientId: string, message: { type: string; [key: string]: unknown }): Promise<void> {
     const client = this.clients.get(clientId);
     if (!client) return;
 
@@ -169,13 +172,43 @@ class WebSocketManager {
       case 'subscribe': {
         const channel = message.channel as string;
         if (!channel) break;
+
         // Unauthenticated sockets can only subscribe to public channels
-        if (!client.authenticated && !PUBLIC_CHANNELS.has(channel)) {
-          client.ws.send(JSON.stringify({ type: 'error', message: 'Authentication required for this channel' }));
-          break;
+        if (!PUBLIC_CHANNELS.has(channel)) {
+          if (!client.authenticated) {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Authentication required for this channel' }));
+            break;
+          }
+          // For channel-scoped subscriptions, verify membership
+          const chMatch = channel.match(/^channel:(\d+)$/);
+          if (chMatch) {
+            try {
+              const members = await storage.getChannelMembers(Number(chMatch[1]));
+              if (!members.some((m: any) => m.userId === client.userId)) {
+                client.ws.send(JSON.stringify({ type: 'error', message: 'Not a member of this channel' }));
+                break;
+              }
+            } catch {
+              client.ws.send(JSON.stringify({ type: 'error', message: 'Failed to verify membership' }));
+              break;
+            }
+          }
         }
+
         client.subscriptions.add(channel);
         logger.debug('Client subscribed to channel', { clientId, channel });
+        break;
+      }
+
+      case 'typing': {
+        // Relay typing indicators for chat channels
+        const typingChannel = message.channel as string;
+        if (!typingChannel || !client.authenticated) break;
+        this.broadcast({
+          type: 'typing',
+          channel: typingChannel,
+          data: { userId: client.userId, displayName: message.displayName },
+        });
         break;
       }
 

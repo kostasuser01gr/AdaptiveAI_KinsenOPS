@@ -1,8 +1,6 @@
 import type { Express } from "express";
-import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
-import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
 import {
   entityRoomPatchSchema, workspaceMemoryPatchSchema, systemPolicyPatchSchema,
   moduleRegistryPatchSchema, activityFeedSchema, digitalTwinSchema, roomMessageSchema,

@@ -330,7 +330,7 @@ export default function VehicleIntelligencePage() {
                         <CardTitle className="text-sm flex items-center gap-2"><Brain className="h-4 w-4 text-primary" /> AI Readiness Prediction</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div className="text-center p-3 rounded-lg bg-muted/30">
                             <div className="text-2xl font-bold text-green-400">{readinessScore}%</div>
                             <div className="text-xs text-muted-foreground">Current Readiness</div>
@@ -508,7 +508,7 @@ function TelematicsPanel({ vehicleId }: { vehicleId: number }) {
       </div>
 
       {Object.keys(summary.byType).length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {Object.entries(summary.byType).map(([type, count]) => (
             <Card key={type} className="glass-panel">
               <CardContent className="p-2 text-center">

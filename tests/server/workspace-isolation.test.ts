@@ -8,7 +8,7 @@
  * All tests are unit-level — they validate the workspace scoping contract
  * at the storage helpers and context layer without requiring a live database.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { runWithWorkspace, getWorkspaceScope } from "../../server/middleware/workspaceContext.js";
 
 // ─── 1. AsyncLocalStorage context propagation ────────────────────────────────
@@ -349,7 +349,7 @@ describe("Per-workspace uniqueness (hardening audit A)", () => {
 
 describe("Auth user lookups (hardening audit A auth fix)", () => {
   it("IStorage exposes getUserById (unscoped for passport deserialize)", async () => {
-    const types = await import("../../server/storage/types.js");
+    const _types = await import("../../server/storage/types.js");
     // If getUserById is not in the interface, TypeScript would have caught this.
     // We verify at runtime that the storage instance has the method.
     const { storage } = await import("../../server/storage.js");

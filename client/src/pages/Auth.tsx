@@ -18,7 +18,7 @@ export default function AuthPage() {
     setIsSubmitting(true);
     try {
       await login(loginData);
-    } catch (err) {}
+    } catch (_err) {/* no-op */}
     setIsSubmitting(false);
   };
 
@@ -27,7 +27,7 @@ export default function AuthPage() {
     setIsSubmitting(true);
     try {
       await register(regData);
-    } catch (err) {}
+    } catch (_err) {/* no-op */}
     setIsSubmitting(false);
   };
 

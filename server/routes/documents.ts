@@ -3,7 +3,7 @@ import { z } from "zod/v4";
 import fs from "fs/promises";
 import path from "path";
 import { storage } from "../storage.js";
-import { requireAuth, requireRole } from "../auth.js";
+import { requireAuth } from "../auth.js";
 import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
 import { requireEntitlement } from "../entitlements/engine.js";
 import { requireCapability } from "../capabilities/engine.js";

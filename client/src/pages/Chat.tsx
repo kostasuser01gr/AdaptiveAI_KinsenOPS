@@ -5,9 +5,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { useLocation } from 'wouter';
 import { 
-  Send, Paperclip, ChevronDown, Bot, User, Zap,
-  Copy, RefreshCcw, Edit2, Lightbulb, Wrench, Hammer,
-  Car, Droplets, CalendarDays, Activity, Shield, Brain, BarChart3,
+  Send, Paperclip, ChevronDown, Bot, Zap,
+  Copy, RefreshCcw, Edit2, Wrench, Hammer,
+  Car, Droplets, CalendarDays, Shield, Brain, BarChart3,
   Hash, AtSign, Slash, CheckCircle2, Clock, ArrowRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -47,7 +47,7 @@ interface SlashCommand {
 }
 
 export default function ChatPage() {
-  const { t, sidebarOpen, isMobile, setCustomActions } = useApp();
+  const { sidebarOpen, isMobile, setCustomActions } = useApp();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -101,16 +101,6 @@ export default function ChatPage() {
       })));
     }
   }, [customActionsData, setCustomActions]);
-
-  const createActionMutation = useMutation({
-    mutationFn: async (data: { label: string; icon: string; target: string; placement: string }) => {
-      const res = await apiRequest("POST", "/api/custom-actions", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/custom-actions"] });
-    },
-  });
 
   const createProposalMutation = useMutation({
     mutationFn: async (data: { type: string; label: string; description?: string; impact: string; scope: string; payload: Record<string, unknown> }) => {
@@ -473,7 +463,7 @@ export default function ChatPage() {
           } catch { /* skip malformed SSE line */ }
         }
       }
-    } catch (err) {
+    } catch (_err) {
       setMessages(prev => prev.map(msg =>
         msg.id === responseId
           ? { ...msg, content: 'Sorry, I encountered an error. Please try again.', isStreaming: false }
@@ -567,7 +557,7 @@ export default function ChatPage() {
           timestamp: new Date()
         }]);
       }
-    } catch (err) {
+    } catch (_err) {
       toast({ title: "Error", description: "Failed to apply changes.", variant: "destructive" });
     }
   };

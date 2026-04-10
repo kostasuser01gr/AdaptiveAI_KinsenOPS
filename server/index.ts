@@ -25,16 +25,17 @@ declare module "http" {
 }
 
 // Security headers
+const isDev = process.env.NODE_ENV !== "production";
 app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
-        styleSrc: ["'self'", "https://fonts.googleapis.com"],
+        scriptSrc: ["'self'", ...(isDev ? ["'unsafe-inline'"] : [])],
+        styleSrc: ["'self'", "https://fonts.googleapis.com", ...(isDev ? ["'unsafe-inline'"] : [])],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:"],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", ...(isDev ? ["ws://localhost:5000"] : [])],
         frameSrc: ["'none'"],
         objectSrc: ["'none'"],
         baseUri: ["'self'"],

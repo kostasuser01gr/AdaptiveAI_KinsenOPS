@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
-import { requireAuth, requireRole } from "../auth.js";
+import { requireAuth } from "../auth.js";
 import { aiChatLimiter } from "../middleware/rate-limiter.js";
 import { recordUsage, checkUsageCeiling } from "../metering/service.js";
 import { requireEntitlement } from "../entitlements/engine.js";
@@ -118,8 +118,8 @@ export function registerAutomationRoutes(app: Express) {
       const descLower = description.toLowerCase();
 
       let trigger = 'vehicle_status_change';
-      let actions: Array<Record<string, unknown>> = [];
-      let conditions: Record<string, unknown> = {};
+      const actions: Array<Record<string, unknown>> = [];
+      const conditions: Record<string, unknown> = {};
       let parsedName = 'Custom Rule';
       let confidence = 0.5;
       const warnings: string[] = [];

@@ -1,11 +1,11 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Eye, Lock, FileText, AlertTriangle, Clock, Users, Download, Activity, Search, RotateCcw, Trash2, CheckCircle2, XCircle, UserCheck } from 'lucide-react';
+import { Shield, Eye, Lock, AlertTriangle, Clock, Users, Download, Activity, Search, Trash2, CheckCircle2, XCircle, UserCheck } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/useAuth";
 import { useEntitlements } from "@/lib/useEntitlements";

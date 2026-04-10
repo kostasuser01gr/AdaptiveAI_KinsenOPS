@@ -7,7 +7,7 @@
 import path from "path";
 import fs from "fs/promises";
 import crypto from "crypto";
-import { db, desc, and, eq, gte, lt, sql } from "../storage/base.js";
+import { db, desc, and, eq, gte, lt } from "../storage/base.js";
 import {
   auditLog,
   incidents,
@@ -22,7 +22,7 @@ import type { ExportType, ExportFormat } from "./policy.js";
 import { MAX_EXPORT_ROWS } from "./policy.js";
 
 const LOCAL_UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
-const EXPORTS_DIR = path.join(LOCAL_UPLOAD_DIR, "exports");
+const _EXPORTS_DIR = path.join(LOCAL_UPLOAD_DIR, "exports");
 
 export interface GeneratedExport {
   storageKey: string;
@@ -65,7 +65,7 @@ function generateKey(exportType: string, format: string): { storageKey: string; 
 async function writeExport(
   storageKey: string,
   content: string,
-  format: ExportFormat,
+  _format: ExportFormat,
 ): Promise<string> {
   const filepath = path.resolve(LOCAL_UPLOAD_DIR, storageKey);
   // Security: ensure resolved path stays within uploads

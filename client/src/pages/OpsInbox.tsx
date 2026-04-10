@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Inbox, CheckCircle2, Clock, AlertTriangle, Loader2, UserCheck, ArrowUpRight, CircleDot, CircleCheck, CircleAlert } from 'lucide-react';
+import { Inbox, CheckCircle2, Clock, Loader2, UserCheck, ArrowUpRight, CircleDot, CircleCheck, CircleAlert } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/useAuth";

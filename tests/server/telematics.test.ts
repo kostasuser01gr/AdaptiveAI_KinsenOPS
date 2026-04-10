@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { z } from "zod/v4";
 
 import {
   insertVehicleEventSchema,
@@ -632,7 +631,7 @@ describe("normalizeSeverity — edge cases for hardening", () => {
 describe("WORKSHOP_TO_REPAIR_ORDER_STATUS — transition validity", () => {
   it("all mapped RO statuses are valid repair order states", () => {
     const validROStatuses = ["open", "in_progress", "awaiting_parts", "completed", "cancelled"];
-    for (const [workshopStatus, roStatus] of Object.entries(WORKSHOP_TO_REPAIR_ORDER_STATUS)) {
+    for (const [_workshopStatus, roStatus] of Object.entries(WORKSHOP_TO_REPAIR_ORDER_STATUS)) {
       expect(validROStatuses).toContain(roStatus);
     }
   });

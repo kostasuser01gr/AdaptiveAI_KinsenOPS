@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Command, Plus, Zap, MessageSquareQuote, Loader2, Trash2, Pencil, Play, List } from 'lucide-react';
+import { Command, Plus, Zap, MessageSquareQuote, Loader2, Trash2, Play, List } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface CustomAction {

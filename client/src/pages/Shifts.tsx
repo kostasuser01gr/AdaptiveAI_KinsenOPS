@@ -4,14 +4,13 @@ import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { CalendarDays, Copy, Wand2, CheckCircle2, History, AlertTriangle, Loader2, Send, Clock, Shield } from 'lucide-react';
+import { CalendarDays, Copy, Wand2, CheckCircle2, History, Loader2, Send, Clock, Shield } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/useAuth";
 import { useEntitlements } from "@/lib/useEntitlements";
 import { LockedFeature } from "@/components/LockedFeature";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Shift } from "@shared/schema";
@@ -33,7 +32,7 @@ export default function ShiftsPage() {
   const [reqType, setReqType] = React.useState('swap');
   const [reqDetails, setReqDetails] = React.useState('');
 
-  const updateMutation = useMutation({
+  const _updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => {
       const res = await apiRequest("PATCH", `/api/shifts/${id}`, data);
       return res.json();

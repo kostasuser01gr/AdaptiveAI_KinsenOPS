@@ -53,6 +53,16 @@ import type {
   UserCapabilityOverride, InsertUserCapabilityOverride,
   VehicleEvent, InsertVehicleEvent,
   WorkshopJob, InsertWorkshopJob,
+  StationPosition, InsertStationPosition,
+  PositionAssignment, InsertPositionAssignment,
+  VehicleTransfer, InsertVehicleTransfer,
+  ChatChannel, InsertChatChannel,
+  ChannelMember, InsertChannelMember,
+  ChannelMessage, InsertChannelMessage,
+  ChannelReaction, InsertChannelReaction,
+  AppGraphVersion, InsertAppGraphVersion,
+  AiModelUsage, InsertAiModelUsage,
+  InstalledExtension, InsertInstalledExtension,
 } from "../../shared/schema.js";
 
 export interface IStorage {
@@ -338,6 +348,74 @@ export interface IStorage {
   updateWorkshopJob(id: number, data: Partial<WorkshopJob>): Promise<WorkshopJob | undefined>;
   linkWorkshopJobToRepairOrder(workshopJobId: number, repairOrderId: number): Promise<WorkshopJob | undefined>;
 
+  // Station positions (Phase 5)
+  getStationPositions(stationId?: number): Promise<StationPosition[]>;
+  getStationPosition(id: number): Promise<StationPosition | undefined>;
+  createStationPosition(data: InsertStationPosition): Promise<StationPosition>;
+  updateStationPosition(id: number, data: Partial<InsertStationPosition>): Promise<StationPosition | undefined>;
+  deleteStationPosition(id: number): Promise<void>;
+
+  // Position assignments
+  getPositionAssignments(positionId?: number): Promise<PositionAssignment[]>;
+  getActiveAssignments(positionId: number): Promise<PositionAssignment[]>;
+  getVehicleAssignment(vehicleId: number): Promise<PositionAssignment | undefined>;
+  createPositionAssignment(data: InsertPositionAssignment): Promise<PositionAssignment>;
+  releasePositionAssignment(id: number): Promise<PositionAssignment | undefined>;
+
+  // Vehicle transfers
+  getVehicleTransfers(filters?: { vehicleId?: number; fromStationId?: number; toStationId?: number; status?: string }): Promise<VehicleTransfer[]>;
+  getVehicleTransfer(id: number): Promise<VehicleTransfer | undefined>;
+  createVehicleTransfer(data: InsertVehicleTransfer): Promise<VehicleTransfer>;
+  updateVehicleTransfer(id: number, data: Partial<InsertVehicleTransfer>): Promise<VehicleTransfer | undefined>;
+
+  // Chat channels (Phase 5)
+  getChatChannels(type?: string): Promise<ChatChannel[]>;
+  getChatChannel(id: number): Promise<ChatChannel | undefined>;
+  getChatChannelBySlug(slug: string): Promise<ChatChannel | undefined>;
+  createChatChannel(data: InsertChatChannel): Promise<ChatChannel>;
+  updateChatChannel(id: number, data: Partial<InsertChatChannel>): Promise<ChatChannel | undefined>;
+  archiveChatChannel(id: number): Promise<ChatChannel | undefined>;
+
+  // Channel members
+  getChannelMembers(channelId: number): Promise<ChannelMember[]>;
+  getUserChannels(userId: number): Promise<ChannelMember[]>;
+  addChannelMember(data: InsertChannelMember): Promise<ChannelMember | undefined>;
+  removeChannelMember(channelId: number, userId: number): Promise<void>;
+  updateChannelMemberReadState(channelId: number, userId: number): Promise<ChannelMember | undefined>;
+
+  // Channel messages
+  getChannelMessages(channelId: number, limit?: number, before?: number): Promise<ChannelMessage[]>;
+  getChannelMessage(id: number): Promise<ChannelMessage | undefined>;
+  createChannelMessage(data: InsertChannelMessage): Promise<ChannelMessage>;
+  updateChannelMessage(id: number, content: string): Promise<ChannelMessage | undefined>;
+  togglePinMessage(id: number, pinned: boolean): Promise<ChannelMessage | undefined>;
+  getPinnedMessages(channelId: number): Promise<ChannelMessage[]>;
+
+  // Channel reactions
+  getMessageReactions(messageId: number): Promise<ChannelReaction[]>;
+  addReaction(data: InsertChannelReaction): Promise<ChannelReaction | undefined>;
+  removeReaction(messageId: number, userId: number, emoji: string): Promise<void>;
+
+  // App Graph (Phase 5)
+  getAppGraphVersions(limit?: number): Promise<AppGraphVersion[]>;
+  getAppGraphVersion(version: number): Promise<AppGraphVersion | undefined>;
+  getLatestAppGraph(): Promise<AppGraphVersion | undefined>;
+  createAppGraphVersion(data: InsertAppGraphVersion): Promise<AppGraphVersion>;
+  applyAppGraphVersion(version: number): Promise<AppGraphVersion | undefined>;
+  rollbackAppGraphVersion(version: number): Promise<AppGraphVersion | undefined>;
+
+  // AI model usage (Phase 5)
+  getAiModelUsage(filters?: { provider?: string; feature?: string; userId?: number; limit?: number }): Promise<AiModelUsage[]>;
+  createAiModelUsage(data: InsertAiModelUsage): Promise<AiModelUsage>;
+
+  // Installed extensions (Phase 5)
+  getInstalledExtensions(enabledOnly?: boolean): Promise<InstalledExtension[]>;
+  getInstalledExtension(id: number): Promise<InstalledExtension | undefined>;
+  getInstalledExtensionBySlug(slug: string): Promise<InstalledExtension | undefined>;
+  installExtension(data: InsertInstalledExtension): Promise<InstalledExtension>;
+  updateExtension(id: number, data: Partial<InsertInstalledExtension>): Promise<InstalledExtension | undefined>;
+  uninstallExtension(id: number): Promise<void>;
+
   // Analytics (cross-domain aggregate queries)
   getDashboardStats(): Promise<Record<string, unknown>>;
   getAnalyticsSummary(): Promise<Record<string, unknown>>;
@@ -397,4 +475,14 @@ export type {
   UserCapabilityOverride, InsertUserCapabilityOverride,
   VehicleEvent, InsertVehicleEvent,
   WorkshopJob, InsertWorkshopJob,
+  StationPosition, InsertStationPosition,
+  PositionAssignment, InsertPositionAssignment,
+  VehicleTransfer, InsertVehicleTransfer,
+  ChatChannel, InsertChatChannel,
+  ChannelMember, InsertChannelMember,
+  ChannelMessage, InsertChannelMessage,
+  ChannelReaction, InsertChannelReaction,
+  AppGraphVersion, InsertAppGraphVersion,
+  AiModelUsage, InsertAiModelUsage,
+  InstalledExtension, InsertInstalledExtension,
 };

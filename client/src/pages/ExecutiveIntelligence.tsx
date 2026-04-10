@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, TrendingUp, TrendingDown, Activity, AlertTriangle, Users, Car, Droplets, ArrowRight, Download, Star, Zap } from 'lucide-react';
 import { useEntitlements } from "@/lib/useEntitlements";
-import { LockedFeature, LockedSection } from "@/components/LockedFeature";
+import { LockedFeature } from "@/components/LockedFeature";
 
 function InsightCard({ title, value, change, changeLabel, icon: Icon, color, action, confidence }: any) {
   const isPositive = change > 0;

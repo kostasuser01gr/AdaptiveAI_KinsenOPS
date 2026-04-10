@@ -200,11 +200,11 @@ export function registerConversationRoutes(app: Express) {
           res.end();
         });
 
-        stream.on('error', (error) => {
+        stream.on('error', (_error: any) => {
           res.write(`data: ${JSON.stringify({ type: 'error', message: 'AI service error' })}\n\n`);
           res.end();
         });
-      } catch (err) {
+      } catch (_err) {
         res.write(`data: ${JSON.stringify({ type: 'error', message: 'Failed to connect to AI service' })}\n\n`);
         res.end();
       }

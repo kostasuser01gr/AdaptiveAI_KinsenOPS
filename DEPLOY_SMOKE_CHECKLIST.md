@@ -169,3 +169,20 @@ echo "=== END ==="
 ```
 
 **Expected:** All lines show `200` (or `201` for register). Any `4xx`/`5xx` = investigate.
+
+---
+
+## 8. Cleanup
+
+After smoke testing, remove the test user to avoid leaving temporary credentials:
+
+```bash
+# Delete the smoke test user (requires admin session cookie)
+SMOKE_USER_ID=$(curl -sf "$BASE_URL/api/users" -b cookie.txt | jq '.[] | select(.username | startswith("smoke_")) | .id')
+if [ -n "$SMOKE_USER_ID" ]; then
+  curl -sf -X DELETE "$BASE_URL/api/users/$SMOKE_USER_ID" -b cookie.txt -w "\nDeleted user $SMOKE_USER_ID: %{http_code}\n"
+fi
+rm -f cookie.txt
+```
+
+**Verify:** No `smoke_*` users remain in `/api/users`.

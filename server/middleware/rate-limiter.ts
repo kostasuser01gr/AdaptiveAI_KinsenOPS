@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import type { Request } from "express";
 
 export const authLimiter = rateLimit({
@@ -20,7 +20,7 @@ export const apiLimiter = rateLimit({
     if (req.user) {
       return `user-${(req.user as Express.User).id}`;
     }
-    return req.ip || 'unknown';
+    return ipKeyGenerator(req.ip!, 48);
   },
 });
 
@@ -34,7 +34,7 @@ export const aiChatLimiter = rateLimit({
     if (req.user) {
       return `ai-${(req.user as Express.User).id}`;
     }
-    return req.ip || 'unknown';
+    return ipKeyGenerator(req.ip!, 48);
   },
 });
 

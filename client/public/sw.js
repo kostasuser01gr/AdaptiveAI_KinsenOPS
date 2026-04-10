@@ -4,7 +4,7 @@ const API_CACHE = `driveai-api-${CACHE_VERSION}`;
 const API_CACHE_MAX = 50;
 
 // Paths that must never be cached (auth, sensitive data)
-const API_NO_CACHE = ['/api/auth/', '/api/admin/', '/api/user'];
+const API_NO_CACHE = ['/api/auth/', '/api/admin/', '/api/user', '/api/channels/', '/api/channel-messages/', '/api/notifications', '/api/custom-actions'];
 
 const PRECACHE_URLS = ['/', '/manifest.json', '/favicon.png'];
 
@@ -104,4 +104,61 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// Background sync for offline wash-queue submissions
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'sync-wash-queue') {
+    event.waitUntil(syncWashQueue());
+  }
+});
+
+async function syncWashQueue() {
+  // Read pending items from IndexedDB or fall through (app handles sessionStorage fallback)
+  try {
+    const _cache = await caches.open(API_CACHE);
+    // Re-attempt any queued POST requests stored in the background sync store
+    // The app itself handles the main sync logic via sessionStorage; this is a safety net
+    const clients = await self.clients.matchAll();
+    for (const client of clients) {
+      client.postMessage({ type: 'SYNC_WASH_QUEUE' });
+    }
+  } catch (_err) {
+    // Sync failed, will retry automatically
+  }
+}
+
+// Push notification support (stub — requires server-side VAPID setup)
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+  try {
+    const payload = event.data.json();
+    event.waitUntil(
+      self.registration.showNotification(payload.title || 'DriveAI', {
+        body: payload.body || '',
+        icon: '/favicon.png',
+        badge: '/favicon.png',
+        tag: payload.tag || 'driveai-notification',
+        data: payload.data || {},
+      })
+    );
+  } catch {
+    // Ignore invalid push payloads
+  }
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || '/';
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
 });

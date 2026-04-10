@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { publicEvidenceLimiter } from "../middleware/rate-limiter.js";
 import { PUBLIC_ROOM_ENTITY_TYPES, isPublicRoomType } from "./_helpers.js";
+import { bridgeRoomToChannel } from "./_bridge.js";
 
 export function registerPublicRoutes(app: Express) {
   // PUBLIC EVIDENCE (customer portal)
@@ -70,12 +71,17 @@ export function registerPublicRoutes(app: Express) {
       const { content } = z.object({
         content: z.string().min(1).max(10000),
       }).strict().parse(req.body);
+      const roomId = Number(req.params.id);
       const msg = await storage.createRoomMessage({
-        roomId: Number(req.params.id),
+        roomId,
         content,
         role: "customer",
         type: "message",
       });
+      // Bridge to washer_bridge channel if linked
+      if (room.entityType === "washer-ops") {
+        bridgeRoomToChannel(roomId, content, "washer");
+      }
       res.status(201).json(msg);
     } catch (e) { next(e); }
   });

@@ -2,7 +2,7 @@
  * User station assignment storage domain module (Phase 4.2A).
  * Multi-station assignment management + backward-compatible scope resolution.
  */
-import { db, eq, and, sql , wsFilter, wsInsert} from "./base.js";
+import { db, eq, and, wsFilter, wsInsert} from "./base.js";
 import {
   userStationAssignments,
   users,

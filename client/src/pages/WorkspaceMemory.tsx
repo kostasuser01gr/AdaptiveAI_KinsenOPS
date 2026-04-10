@@ -1,12 +1,12 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Brain, BookOpen, Settings, Lightbulb, Database, Clock, Shield, Plus, Search, AlertTriangle, FileText, MessageSquare, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Brain, BookOpen, Settings, Lightbulb, Database, Shield, Plus, Search, AlertTriangle, FileText, MessageSquare, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -233,7 +233,7 @@ export default function WorkspaceMemoryPage() {
                   <h3 className="text-sm font-semibold">SOP Generator</h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-3">AI can generate Standard Operating Procedures based on patterns from chat discussions, resolved incidents, and operational data.</p>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <Button variant="outline" size="sm" className="h-8 text-xs" data-testid="button-gen-sop-wash">Generate Wash SOP</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs" data-testid="button-gen-sop-damage">Generate Damage SOP</Button>
                   <Button variant="outline" size="sm" className="h-8 text-xs" data-testid="button-gen-sop-shift">Generate Shift SOP</Button>

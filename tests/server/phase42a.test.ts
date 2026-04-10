@@ -1,7 +1,7 @@
 /**
  * Phase 4.2A Tests — Usage Metering, Capabilities, Station Assignments
  */
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 
 // ─── Schema validation tests ────────────────────────────────────────────────
 
@@ -118,7 +118,7 @@ import {
   CAPABILITIES,
   CAPABILITY_CATALOG,
   isValidCapability,
-  type CapabilityKey,
+  type _CapabilityKey,
 } from "../../server/capabilities/engine.js";
 
 describe("Phase 4.2A — Capability catalog", () => {
@@ -192,7 +192,7 @@ describe("Phase 4.2A — Metering service", () => {
     });
 
     it("every action has feature and action fields", () => {
-      for (const [key, def] of Object.entries(METERED_ACTIONS)) {
+      for (const [_key, def] of Object.entries(METERED_ACTIONS)) {
         expect(typeof def.feature).toBe("string");
         expect(def.feature.length).toBeGreaterThan(0);
         expect(typeof def.action).toBe("string");
@@ -268,7 +268,6 @@ describe("Phase 4.2A — Capability resolution logic", () => {
   it("resolveCapability follows user_override → role_default → deny chain", async () => {
     // This is a behavioral spec test — the resolution order is the key invariant
     // Test via the engine's exported resolution function
-    const { resolveCapability, resolveAllCapabilities, invalidateCapabilityCache } = await import("../../server/capabilities/engine.js");
 
     // The engine uses dynamic import of storage, so in a test without DB,
     // we verify the resolution logic through the catalog structure

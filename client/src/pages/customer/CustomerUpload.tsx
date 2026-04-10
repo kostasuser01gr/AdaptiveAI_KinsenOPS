@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useLocation, useRoute } from 'wouter';
+import { useRoute } from 'wouter';
 import { useMutation } from '@tanstack/react-query';
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Camera, Image as ImageIcon, UploadCloud, Info, CheckCircle2, AlertTriangle, Shield, ChevronRight, Clock, Lock, Eye, FileText, Trash2, Loader2 } from 'lucide-react';
+import { Camera, Image as ImageIcon, UploadCloud, CheckCircle2, AlertTriangle, Shield, ChevronRight, Lock, Eye, Trash2, Loader2 } from 'lucide-react';
 
 const DAMAGE_ZONES = ['Front Left', 'Front Center', 'Front Right', 'Left Side', 'Right Side', 'Rear Left', 'Rear Center', 'Rear Right', 'Roof', 'Interior'];
 

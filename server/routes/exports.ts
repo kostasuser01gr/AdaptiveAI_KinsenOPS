@@ -2,7 +2,7 @@
  * Export routes — CRUD + approval + download for export requests (Phase 4.1A).
  */
 import type { Express } from "express";
-import path from "path";
+import _path from "path";
 import { storage } from "../storage.js";
 import { requireRole, requireAuth } from "../auth.js";
 import { auditLog } from "../middleware/audit.js";
@@ -13,7 +13,6 @@ import {
   validateExportParams,
   initialStatus,
   canRequestExport,
-  requiresApproval,
   EXPORT_EXPIRY_HOURS,
   type ExportType,
   type ExportFormat,

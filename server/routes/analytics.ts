@@ -7,9 +7,8 @@ import { recordUsage, checkUsageCeiling } from "../metering/service.js";
 import { searchLimiter } from "../middleware/rate-limiter.js";
 import { requireEntitlement } from "../entitlements/engine.js";
 import { requireCapability } from "../capabilities/engine.js";
-import { metricsCollector } from "../observability/metrics.js";
 import {
-  insertKpiDefinitionSchema, insertAnomalySchema, insertExecutiveBriefingSchema,
+  insertKpiDefinitionSchema,
 } from "../../shared/schema.js";
 
 export function registerAnalyticsRoutes(app: Express) {

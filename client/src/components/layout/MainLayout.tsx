@@ -8,7 +8,7 @@ import { useLocation } from 'wouter';
 import {
   Menu, Zap, Search as SearchIcon, Bell, Mic, Clock, FileText, Settings, WifiOff, X,
   Car, Droplets, CalendarDays, Activity, BarChart3, Shield, Eye, Brain, ShieldCheck,
-  Command, Database, Calendar, FileUp, Inbox, Users, ChevronRight, AlertCircle,
+  Command, Database, Inbox, Users, AlertCircle,
   CheckCircle2, Info, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -154,7 +154,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       {notifOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
-          <div className="fixed right-0 top-0 z-50 w-[380px] h-full bg-card border-l shadow-2xl flex flex-col" data-testid="notification-drawer">
+          <div className="fixed right-0 top-0 z-50 w-full sm:w-[380px] h-full bg-card border-l shadow-2xl flex flex-col" data-testid="notification-drawer">
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-2">
                 <Bell className="h-5 w-5 text-primary" />

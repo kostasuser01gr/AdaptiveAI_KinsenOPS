@@ -9,6 +9,7 @@
   "orientation": "any",
   "background_color": "#0f0f11",
   "theme_color": "#17171a",
+  "categories": ["business", "productivity"],
   "icons": [
     {
       "src": "/favicon.png",
@@ -20,6 +21,48 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
-  ]
+  ],
+  "shortcuts": [
+    {
+      "name": "Fleet",
+      "short_name": "Fleet",
+      "url": "/fleet",
+      "description": "Open Fleet Intelligence",
+      "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Wash Queue",
+      "short_name": "Wash",
+      "url": "/washer/register",
+      "description": "Open Washer Kiosk"
+    },
+    {
+      "name": "Channels",
+      "short_name": "Chat",
+      "url": "/channels",
+      "description": "Open team channels"
+    },
+    {
+      "name": "Inbox",
+      "short_name": "Inbox",
+      "url": "/inbox",
+      "description": "Open Ops Inbox"
+    }
+  ],
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  }
 }

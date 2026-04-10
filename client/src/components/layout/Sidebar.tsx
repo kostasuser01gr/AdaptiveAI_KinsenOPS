@@ -6,8 +6,7 @@ import { Link, useLocation } from 'wouter';
 import { 
   Plus, Settings, Car, MessageSquare, MoreHorizontal, Pin, Command,
   Database, Users, Droplets, CalendarDays, Calendar, FileUp, Inbox,
-  BarChart3, Bot, LogOut, Activity, Zap, Shield, Eye, Brain, ShieldCheck,
-  MapPin, Crown, ChevronRight, Building2, FileCheck
+  BarChart3, Bot, LogOut, Activity, Zap, Shield, Eye, Brain, ShieldCheck, Crown, ChevronRight, Building2, FileCheck, Hash, Blocks, EyeOff, Pencil
 } from 'lucide-react';
 import FeedbackDialog from '@/components/FeedbackDialog';
 import { Button } from '@/components/ui/button';
@@ -17,6 +16,7 @@ import {
   DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { usePageLayout } from "@/hooks/useLayoutPreferences";
 
 const ROLE_HIERARCHY: Record<string, number> = { admin: 4, supervisor: 3, coordinator: 2, agent: 1 };
 const ROLE_COLORS: Record<string, string> = {
@@ -31,7 +31,7 @@ function hasAccess(userRole: string, requiredLevel: number) {
 }
 
 export default function Sidebar() {
-  const { sidebarOpen, setSidebarOpen, isMobile, t } = useApp();
+  const { sidebarOpen, t } = useApp();
   const { user, logout } = useAuth();
   const [location] = useLocation();
 
@@ -45,7 +45,17 @@ export default function Sidebar() {
   const role = user?.role || 'agent';
   const station = (user as any)?.station;
 
-  const handleLogout = async () => { try { await logout(); } catch (e) {} };
+  const handleLogout = async () => { try { await logout(); } catch (_e) { /* no-op */ } };
+
+  // Per-user sidebar personalization — hide nav items (RBAC gates remain enforced)
+  const { get: getSidebarPref, set: setSidebarPref } = usePageLayout('sidebar');
+  const hiddenItems = getSidebarPref<string[]>('hidden', []);
+  const [editMode, setEditMode] = React.useState(false);
+  const isHidden = (href: string) => hiddenItems.includes(href);
+  const toggleHidden = (href: string) => {
+    const next = isHidden(href) ? hiddenItems.filter((h: string) => h !== href) : [...hiddenItems, href];
+    setSidebarPref('hidden', next);
+  };
 
   return (
     <div className={`fixed inset-y-0 left-0 z-40 w-[280px] bg-sidebar flex flex-col transition-transform duration-300 ease-in-out transform border-r border-sidebar-border ${
@@ -91,39 +101,46 @@ export default function Sidebar() {
           </Button>
         </div>
 
-        <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">Operations</div>
+        <div className="mt-4 mb-2 px-3 flex items-center justify-between">
+          <span className="text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">Operations</span>
+          <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEditMode(!editMode)} data-testid="button-sidebar-edit">
+            <Pencil className={`h-3 w-3 ${editMode ? 'text-primary' : 'text-sidebar-foreground/30'}`} />
+          </Button>
+        </div>
         <div className="flex flex-col gap-0.5">
-          <NavItem href="/fleet" icon={<Car />} label={t('fleet')} active={isModuleActive('/fleet')} badge={dashStats?.vehicles} />
-          <NavItem href="/washers" icon={<Droplets />} label={t('washers')} active={isModuleActive('/washers')} badge={dashStats?.washQueue} />
-          <NavItem href="/shifts" icon={<CalendarDays />} label={t('shifts')} active={isModuleActive('/shifts')} badgeVariant={(dashStats?.pendingShiftRequests ?? 0) > 0 ? 'warning' : undefined} badge={(dashStats?.pendingShiftRequests ?? 0) > 0 ? dashStats?.pendingShiftRequests : undefined} />
-          <NavItem href="/calendar" icon={<Calendar />} label={t('calendar')} active={isModuleActive('/calendar')} />
-          <NavItem href="/imports" icon={<FileUp />} label={t('imports')} active={isModuleActive('/imports')} />
-          <NavItem href="/vehicle-intelligence" icon={<Eye />} label="Vehicle Intel" active={isModuleActive('/vehicle-intelligence')} />
+          <NavItem href="/fleet" icon={<Car />} label={t('fleet')} active={isModuleActive('/fleet')} badge={dashStats?.vehicles} hidden={isHidden('/fleet')} editMode={editMode} onToggle={toggleHidden} />
+          <NavItem href="/washers" icon={<Droplets />} label={t('washers')} active={isModuleActive('/washers')} badge={dashStats?.washQueue} hidden={isHidden('/washers')} editMode={editMode} onToggle={toggleHidden} />
+          <NavItem href="/shifts" icon={<CalendarDays />} label={t('shifts')} active={isModuleActive('/shifts')} badgeVariant={(dashStats?.pendingShiftRequests ?? 0) > 0 ? 'warning' : undefined} badge={(dashStats?.pendingShiftRequests ?? 0) > 0 ? dashStats?.pendingShiftRequests : undefined} hidden={isHidden('/shifts')} editMode={editMode} onToggle={toggleHidden} />
+          <NavItem href="/calendar" icon={<Calendar />} label={t('calendar')} active={isModuleActive('/calendar')} hidden={isHidden('/calendar')} editMode={editMode} onToggle={toggleHidden} />
+          <NavItem href="/imports" icon={<FileUp />} label={t('imports')} active={isModuleActive('/imports')} hidden={isHidden('/imports')} editMode={editMode} onToggle={toggleHidden} />
+          <NavItem href="/vehicle-intelligence" icon={<Eye />} label="Vehicle Intel" active={isModuleActive('/vehicle-intelligence')} hidden={isHidden('/vehicle-intelligence')} editMode={editMode} onToggle={toggleHidden} />
+          <NavItem href="/channels" icon={<Hash />} label="Channels" active={isModuleActive('/channels')} hidden={isHidden('/channels')} editMode={editMode} onToggle={toggleHidden} />
         </div>
 
         <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">Intelligence</div>
         <div className="flex flex-col gap-0.5">
-          <NavItem href="/digital-twin" icon={<Activity />} label="Digital Twin" active={isModuleActive('/digital-twin')} />
-          {hasAccess(role, 2) && <NavItem href="/executive" icon={<BarChart3 />} label="Executive Intel" active={isModuleActive('/executive')} />}
-          <NavItem href="/analytics" icon={<BarChart3 />} label={t('analytics')} active={isModuleActive('/analytics')} />
-          <NavItem href="/war-room" icon={<Shield />} label="War Room" active={isModuleActive('/war-room')} badge={dashStats?.warRooms} />
+          <NavItem href="/digital-twin" icon={<Activity />} label="Digital Twin" active={isModuleActive('/digital-twin')} hidden={isHidden('/digital-twin')} editMode={editMode} onToggle={toggleHidden} />
+          {hasAccess(role, 2) && <NavItem href="/executive" icon={<BarChart3 />} label="Executive Intel" active={isModuleActive('/executive')} hidden={isHidden('/executive')} editMode={editMode} onToggle={toggleHidden} />}
+          <NavItem href="/analytics" icon={<BarChart3 />} label={t('analytics')} active={isModuleActive('/analytics')} hidden={isHidden('/analytics')} editMode={editMode} onToggle={toggleHidden} />
+          <NavItem href="/war-room" icon={<Shield />} label="War Room" active={isModuleActive('/war-room')} badge={dashStats?.warRooms} hidden={isHidden('/war-room')} editMode={editMode} onToggle={toggleHidden} />
         </div>
 
         <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">Platform</div>
         <div className="flex flex-col gap-0.5">
-          <NavItem href="/automations" icon={<Zap />} label="Automations" active={isModuleActive('/automations')} badge={dashStats?.automations} />
-          {hasAccess(role, 2) && <NavItem href="/workspace-memory" icon={<Brain />} label="AI Memory" active={isModuleActive('/workspace-memory')} />}
-          <NavItem href="/shortcuts" icon={<Command />} label={t('shortcuts')} active={isModuleActive('/shortcuts')} />
-          {hasAccess(role, 2) && <NavItem href="/proposals" icon={<FileCheck />} label="Proposals" active={isModuleActive('/proposals')} />}
-          <NavItem href="/knowledge" icon={<Database />} label={t('knowledge_base')} active={isModuleActive('/knowledge')} />
+          <NavItem href="/automations" icon={<Zap />} label="Automations" active={isModuleActive('/automations')} badge={dashStats?.automations} hidden={isHidden('/automations')} editMode={editMode} onToggle={toggleHidden} />
+          {hasAccess(role, 2) && <NavItem href="/workspace-memory" icon={<Brain />} label="AI Memory" active={isModuleActive('/workspace-memory')} hidden={isHidden('/workspace-memory')} editMode={editMode} onToggle={toggleHidden} />}
+          <NavItem href="/shortcuts" icon={<Command />} label={t('shortcuts')} active={isModuleActive('/shortcuts')} hidden={isHidden('/shortcuts')} editMode={editMode} onToggle={toggleHidden} />
+          {hasAccess(role, 2) && <NavItem href="/proposals" icon={<FileCheck />} label="Proposals" active={isModuleActive('/proposals')} hidden={isHidden('/proposals')} editMode={editMode} onToggle={toggleHidden} />}
+          {hasAccess(role, 2) && <NavItem href="/app-builder" icon={<Blocks />} label="App Builder" active={isModuleActive('/app-builder')} hidden={isHidden('/app-builder')} editMode={editMode} onToggle={toggleHidden} />}
+          <NavItem href="/knowledge" icon={<Database />} label={t('knowledge_base')} active={isModuleActive('/knowledge')} hidden={isHidden('/knowledge')} editMode={editMode} onToggle={toggleHidden} />
         </div>
 
         {hasAccess(role, 3) && (
           <>
             <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">Governance</div>
             <div className="flex flex-col gap-0.5">
-              <NavItem href="/trust" icon={<ShieldCheck />} label="Trust Console" active={isModuleActive('/trust')} />
-              <NavItem href="/users" icon={<Users />} label={t('users')} active={isModuleActive('/users')} />
+              <NavItem href="/trust" icon={<ShieldCheck />} label="Trust Console" active={isModuleActive('/trust')} hidden={isHidden('/trust')} editMode={editMode} onToggle={toggleHidden} />
+              <NavItem href="/users" icon={<Users />} label={t('users')} active={isModuleActive('/users')} hidden={isHidden('/users')} editMode={editMode} onToggle={toggleHidden} />
             </div>
           </>
         )}
@@ -187,27 +204,35 @@ export default function Sidebar() {
   );
 }
 
-function NavItem({ href, icon, label, active, badge, badgeVariant }: { href: string, icon: React.ReactNode, label: string, active: boolean, badge?: number, badgeVariant?: 'warning' }) {
+function NavItem({ href, icon, label, active, badge, badgeVariant, hidden, editMode, onToggle }: { href: string, icon: React.ReactNode, label: string, active: boolean, badge?: number, badgeVariant?: 'warning', hidden?: boolean, editMode?: boolean, onToggle?: (href: string) => void }) {
+  if (hidden && !editMode) return null;
   return (
-    <Button 
-      variant={active ? 'secondary' : 'ghost'} 
-      className={`w-full justify-start h-9 px-3 text-sm rounded-md transition-colors ${
-        active ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-      }`}
-      asChild
-    >
-      <Link href={href}>
-        <div className="flex items-center gap-3 w-full">
-          {React.cloneElement(icon as React.ReactElement<{ className?: string }>, { className: "h-4 w-4 shrink-0" })}
-          <span className="truncate flex-1">{label}</span>
-          {badge !== undefined && badge > 0 && (
-            <Badge variant={badgeVariant === 'warning' ? 'secondary' : 'outline'} className={`h-5 px-1.5 text-[10px] font-mono ${badgeVariant === 'warning' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'text-muted-foreground'}`}>
-              {badge}
-            </Badge>
-          )}
-        </div>
-      </Link>
-    </Button>
+    <div className="flex items-center gap-0.5">
+      <Button 
+        variant={active ? 'secondary' : 'ghost'} 
+        className={`flex-1 justify-start h-9 px-3 text-sm rounded-md transition-colors ${
+          active ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium' : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+        } ${hidden ? 'opacity-40' : ''}`}
+        asChild
+      >
+        <Link href={href}>
+          <div className="flex items-center gap-3 w-full">
+            {React.cloneElement(icon as React.ReactElement<{ className?: string }>, { className: "h-4 w-4 shrink-0" })}
+            <span className="truncate flex-1">{label}</span>
+            {badge !== undefined && badge > 0 && (
+              <Badge variant={badgeVariant === 'warning' ? 'secondary' : 'outline'} className={`h-5 px-1.5 text-[10px] font-mono ${badgeVariant === 'warning' ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'text-muted-foreground'}`}>
+                {badge}
+              </Badge>
+            )}
+          </div>
+        </Link>
+      </Button>
+      {editMode && onToggle && (
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => onToggle(href)}>
+          {hidden ? <EyeOff className="h-3 w-3 text-muted-foreground" /> : <Eye className="h-3 w-3 text-sidebar-foreground/60" />}
+        </Button>
+      )}
+    </div>
   );
 }
 

@@ -1043,3 +1043,219 @@ export const workshopJobs = pgTable("workshop_jobs", {
 export const insertWorkshopJobSchema = createInsertSchema(workshopJobs).omit({ createdAt: true, updatedAt: true, lastSyncAt: true });
 export type InsertWorkshopJob = z.infer<typeof insertWorkshopJobSchema>;
 export type WorkshopJob = typeof workshopJobs.$inferSelect;
+
+// ═══════════════════════════════════════════════════════════
+// PHASE 5 TABLES — Fleet Positions, Transfers, Channels, App Graph, Extensions
+// ═══════════════════════════════════════════════════════════
+
+// ─── STATION POSITIONS (Fleet expansion — typed parking/staging positions) ───
+export const stationPositions = pgTable("station_positions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default"),
+  stationId: integer("station_id").notNull(),
+  code: text("code").notNull(),
+  label: text("label").notNull(),
+  type: text("type").notNull().default("parking"), // parking | staging | wash_bay | pickup | dropoff | overflow
+  capacity: integer("capacity").notNull().default(1),
+  active: boolean("active").notNull().default(true),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("station_pos_ws_station_code_idx").on(t.workspaceId, t.stationId, t.code),
+  index("station_pos_station_idx").on(t.stationId),
+  index("station_pos_type_idx").on(t.type),
+]);
+export const insertStationPositionSchema = createInsertSchema(stationPositions).omit({ createdAt: true });
+export type InsertStationPosition = z.infer<typeof insertStationPositionSchema>;
+export type StationPosition = typeof stationPositions.$inferSelect;
+
+// ─── POSITION ASSIGNMENTS (vehicle-to-position mapping) ───
+export const positionAssignments = pgTable("position_assignments", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default"),
+  positionId: integer("position_id").notNull(),
+  vehicleId: integer("vehicle_id").notNull(),
+  assignedBy: integer("assigned_by"),
+  assignedAt: timestamp("assigned_at").notNull().defaultNow(),
+  releasedAt: timestamp("released_at"),
+}, (t) => [
+  index("pos_assign_position_idx").on(t.positionId),
+  index("pos_assign_vehicle_idx").on(t.vehicleId),
+  index("pos_assign_active_idx").on(t.positionId, t.releasedAt),
+]);
+export const insertPositionAssignmentSchema = createInsertSchema(positionAssignments).omit({ assignedAt: true, releasedAt: true });
+export type InsertPositionAssignment = z.infer<typeof insertPositionAssignmentSchema>;
+export type PositionAssignment = typeof positionAssignments.$inferSelect;
+
+// ─── VEHICLE TRANSFERS (inter-station transfer tracking) ───
+export const vehicleTransfers = pgTable("vehicle_transfers", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default"),
+  vehicleId: integer("vehicle_id").notNull(),
+  fromStationId: integer("from_station_id").notNull(),
+  toStationId: integer("to_station_id").notNull(),
+  status: text("status").notNull().default("requested"), // requested | in_transit | delivered | cancelled
+  requestedBy: integer("requested_by").notNull(),
+  driverName: text("driver_name"),
+  reason: text("reason"),
+  notes: text("notes"),
+  estimatedArrival: timestamp("estimated_arrival"),
+  departedAt: timestamp("departed_at"),
+  arrivedAt: timestamp("arrived_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  index("transfers_vehicle_idx").on(t.vehicleId),
+  index("transfers_from_idx").on(t.fromStationId),
+  index("transfers_to_idx").on(t.toStationId),
+  index("transfers_status_idx").on(t.status),
+  index("transfers_created_idx").on(t.createdAt),
+]);
+export const insertVehicleTransferSchema = createInsertSchema(vehicleTransfers).omit({ createdAt: true, updatedAt: true, departedAt: true, arrivedAt: true });
+export type InsertVehicleTransfer = z.infer<typeof insertVehicleTransferSchema>;
+export type VehicleTransfer = typeof vehicleTransfers.$inferSelect;
+
+// ─── CHAT CHANNELS (Discord-style team messaging) ───
+export const chatChannels = pgTable("chat_channels", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default"),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  description: text("description"),
+  type: text("type").notNull().default("public"), // public | private | station | washer_bridge
+  stationId: integer("station_id"),
+  createdBy: integer("created_by").notNull(),
+  archived: boolean("archived").notNull().default(false),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("channels_ws_slug_idx").on(t.workspaceId, t.slug),
+  index("channels_type_idx").on(t.type),
+  index("channels_station_idx").on(t.stationId),
+]);
+export const insertChatChannelSchema = createInsertSchema(chatChannels).omit({ createdAt: true, updatedAt: true, archived: true });
+export type InsertChatChannel = z.infer<typeof insertChatChannelSchema>;
+export type ChatChannel = typeof chatChannels.$inferSelect;
+
+// ─── CHANNEL MEMBERS (membership + read state) ───
+export const channelMembers = pgTable("channel_members", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  channelId: integer("channel_id").notNull(),
+  userId: integer("user_id").notNull(),
+  role: text("role").notNull().default("member"), // owner | admin | member
+  lastReadAt: timestamp("last_read_at"),
+  muted: boolean("muted").notNull().default(false),
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("channel_member_uniq_idx").on(t.channelId, t.userId),
+  index("channel_member_user_idx").on(t.userId),
+]);
+export const insertChannelMemberSchema = createInsertSchema(channelMembers).omit({ joinedAt: true, lastReadAt: true });
+export type InsertChannelMember = z.infer<typeof insertChannelMemberSchema>;
+export type ChannelMember = typeof channelMembers.$inferSelect;
+
+// ─── CHANNEL MESSAGES (Discord-style with replies, edits) ───
+export const channelMessages = pgTable("channel_messages", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  channelId: integer("channel_id").notNull(),
+  userId: integer("user_id").notNull(),
+  content: text("content").notNull(),
+  replyToId: integer("reply_to_id"),
+  edited: boolean("edited").notNull().default(false),
+  editedAt: timestamp("edited_at"),
+  pinned: boolean("pinned").notNull().default(false),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("ch_msg_channel_idx").on(t.channelId, t.createdAt),
+  index("ch_msg_user_idx").on(t.userId),
+  index("ch_msg_reply_idx").on(t.replyToId),
+  index("ch_msg_pinned_idx").on(t.channelId, t.pinned),
+]);
+export const insertChannelMessageSchema = createInsertSchema(channelMessages).omit({ createdAt: true, edited: true, editedAt: true, pinned: true });
+export type InsertChannelMessage = z.infer<typeof insertChannelMessageSchema>;
+export type ChannelMessage = typeof channelMessages.$inferSelect;
+
+// ─── CHANNEL REACTIONS (emoji reactions on messages) ───
+export const channelReactions = pgTable("channel_reactions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  messageId: integer("message_id").notNull(),
+  userId: integer("user_id").notNull(),
+  emoji: text("emoji").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("ch_reaction_uniq_idx").on(t.messageId, t.userId, t.emoji),
+  index("ch_reaction_message_idx").on(t.messageId),
+]);
+export const insertChannelReactionSchema = createInsertSchema(channelReactions).omit({ createdAt: true });
+export type InsertChannelReaction = z.infer<typeof insertChannelReactionSchema>;
+export type ChannelReaction = typeof channelReactions.$inferSelect;
+
+// ─── APP GRAPH VERSIONS (versioned application configuration) ───
+export const appGraphVersions = pgTable("app_graph_versions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default"),
+  version: integer("version").notNull(),
+  label: text("label"),
+  graph: jsonb("graph").$type<Record<string, unknown>>().notNull(),
+  diff: jsonb("diff").$type<Record<string, unknown>>(),
+  createdBy: integer("created_by").notNull(),
+  appliedAt: timestamp("applied_at"),
+  rolledBackAt: timestamp("rolled_back_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("app_graph_ws_version_idx").on(t.workspaceId, t.version),
+  index("app_graph_created_idx").on(t.createdAt),
+]);
+export const insertAppGraphVersionSchema = createInsertSchema(appGraphVersions).omit({ createdAt: true, appliedAt: true, rolledBackAt: true });
+export type InsertAppGraphVersion = z.infer<typeof insertAppGraphVersionSchema>;
+export type AppGraphVersion = typeof appGraphVersions.$inferSelect;
+
+// ─── AI MODEL USAGE (gateway token/cost tracking) ───
+export const aiModelUsage = pgTable("ai_model_usage", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default"),
+  provider: text("provider").notNull(), // anthropic | openai | local
+  model: text("model").notNull(),
+  userId: integer("user_id"),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  costCents: real("cost_cents"),
+  latencyMs: integer("latency_ms"),
+  feature: text("feature").notNull().default("chat"), // chat | summary | ocr | automation
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("ai_usage_ws_provider_idx").on(t.workspaceId, t.provider),
+  index("ai_usage_created_idx").on(t.createdAt),
+  index("ai_usage_user_idx").on(t.userId),
+  index("ai_usage_feature_idx").on(t.feature),
+]);
+export const insertAiModelUsageSchema = createInsertSchema(aiModelUsage).omit({ createdAt: true });
+export type InsertAiModelUsage = z.infer<typeof insertAiModelUsageSchema>;
+export type AiModelUsage = typeof aiModelUsage.$inferSelect;
+
+// ─── INSTALLED EXTENSIONS (extension/plugin registry) ───
+export const installedExtensions = pgTable("installed_extensions", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default"),
+  slug: text("slug").notNull(),
+  name: text("name").notNull(),
+  version: text("version").notNull(),
+  description: text("description"),
+  author: text("author"),
+  manifest: jsonb("manifest").$type<Record<string, unknown>>().notNull(),
+  permissions: jsonb("permissions").$type<string[]>().notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  config: jsonb("config").$type<Record<string, unknown>>(),
+  installedBy: integer("installed_by").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("ext_ws_slug_idx").on(t.workspaceId, t.slug),
+  index("ext_enabled_idx").on(t.enabled),
+]);
+export const insertInstalledExtensionSchema = createInsertSchema(installedExtensions).omit({ createdAt: true, updatedAt: true });
+export type InsertInstalledExtension = z.infer<typeof insertInstalledExtensionSchema>;
+export type InstalledExtension = typeof installedExtensions.$inferSelect;

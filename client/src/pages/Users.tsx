@@ -6,9 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users as UsersIcon, Shield, MoreHorizontal, UserPlus, AlertCircle } from 'lucide-react';
+import { Users as Shield, MoreHorizontal, UserPlus, AlertCircle } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
