@@ -119,6 +119,16 @@ jobs:
       - run: bash scripts/ci/setup-toolchain.sh nodejs
       - run: npx playwright install chromium
       - run: npx drizzle-kit push --force
+      - name: Create session table (not in Drizzle schema)
+        run: |
+          psql "$DATABASE_URL" -c "
+            CREATE TABLE IF NOT EXISTS user_sessions (
+              sid VARCHAR NOT NULL PRIMARY KEY,
+              sess JSON NOT NULL,
+              expire TIMESTAMP(6) NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_sessions_expire ON user_sessions (expire);
+          "
       - run: bash scripts/ci/run-gates.sh G5
       - if: always()
         uses: actions/upload-artifact@v7
