@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Droplets, CheckCircle2, Undo2, Camera, Zap, AlertTriangle, Sun, Hand, BarChart3, TrendingUp, Shield } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MotionDialog } from '@/components/motion/MotionDialog';
 import PlateScanner from "@/components/scanner/PlateScanner";
 
 const WASH_TYPES = ['Quick Wash', 'Full Detail', 'Interior Only', 'Exterior Only'];
@@ -210,9 +210,7 @@ export default function WasherRegister() {
         </div>
       </ScrollArea>
 
-      <Dialog open={showSummary} onOpenChange={setShowSummary}>
-        <DialogContent>
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Shift Summary</DialogTitle></DialogHeader>
+      <MotionDialog open={showSummary} onOpenChange={setShowSummary} title="Shift Summary">
           <div className="space-y-4 mt-4">
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="bg-muted/30 rounded-lg p-3">
@@ -239,8 +237,7 @@ export default function WasherRegister() {
               </CardContent>
             </Card>
           </div>
-        </DialogContent>
-      </Dialog>
+      </MotionDialog>
     </div>
   );
 }

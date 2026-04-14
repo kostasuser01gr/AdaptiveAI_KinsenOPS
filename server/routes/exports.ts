@@ -13,7 +13,7 @@ import {
   validateExportParams,
   initialStatus,
   canRequestExport,
-  EXPORT_EXPIRY_HOURS,
+  getExportExpiryHours,
   type ExportType,
   type ExportFormat,
 } from "../exports/policy.js";
@@ -188,7 +188,9 @@ export function registerExportRoutes(app: Express) {
         if (!filepath) {
           return res.status(404).json({ message: "Export file not found on disk" });
         }
-        res.setHeader("Content-Disposition", `attachment; filename="${row.filename || "export"}"`);
+        // RT-14: Sanitise filename for Content-Disposition to prevent header injection
+        const safeName = (row.filename || "export").replace(/["\r\n]/g, '_');
+        res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
         res.setHeader("Content-Type", row.mimeType || "application/octet-stream");
         res.sendFile(filepath);
       } catch (err) { next(err); }
@@ -213,8 +215,9 @@ async function processExportInBackground(exportId: number) {
       (row.filters as Record<string, unknown>) || undefined,
     );
 
+    const expiryHours = await getExportExpiryHours();
     const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + EXPORT_EXPIRY_HOURS);
+    expiresAt.setHours(expiresAt.getHours() + expiryHours);
 
     await storage.updateExportRequest(exportId, {
       status: "completed",

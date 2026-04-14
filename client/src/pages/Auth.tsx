@@ -1,34 +1,52 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod/v4';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Car, Loader2 } from 'lucide-react';
 import { useAuth } from '@/lib/useAuth';
 
+const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+type LoginValues = z.infer<typeof loginSchema>;
+
+const registerSchema = z.object({
+  displayName: z.string().min(1, "Display name is required").max(100),
+  username: z.string().min(2, "Username must be at least 2 characters").max(50),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  inviteToken: z.string().min(1, "Invite token is required"),
+});
+type RegisterValues = z.infer<typeof registerSchema>;
+
 export default function AuthPage() {
   const { login, register, loginError, registerError } = useAuth();
-  const [loginData, setLoginData] = useState({ username: '', password: '' });
-  const [regData, setRegData] = useState({ username: '', password: '', displayName: '' });
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const loginForm = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { username: '', password: '' },
+  });
+
+  const registerForm = useForm<RegisterValues>({
+    resolver: zodResolver(registerSchema),
+    defaultValues: { username: '', password: '', displayName: '', inviteToken: '' },
+  });
+
+  const handleLogin = async (values: LoginValues) => {
     try {
-      await login(loginData);
+      await login(values);
     } catch (_err) {/* no-op */}
-    setIsSubmitting(false);
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const handleRegister = async (values: RegisterValues) => {
     try {
-      await register(regData);
+      await register(values);
     } catch (_err) {/* no-op */}
-    setIsSubmitting(false);
   };
 
   return (
@@ -57,43 +75,38 @@ export default function AuthPage() {
                 <CardDescription>Sign in to access your workspace</CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleLogin} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-username">Username</Label>
-                    <Input
-                      id="login-username"
-                      data-testid="input-login-username"
-                      value={loginData.username}
-                      onChange={(e) => setLoginData({ ...loginData, username: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Password</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      data-testid="input-login-password"
-                      value={loginData.password}
-                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                      required
-                    />
-                  </div>
-                  {loginError && (
-                    <p className="text-sm text-destructive" data-testid="text-login-error">
-                      {(loginError as Error).message?.includes("401") ? "Invalid username or password" : "Login failed"}
-                    </p>
-                  )}
-                  <Button type="submit" className="w-full" disabled={isSubmitting} data-testid="button-login">
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Sign In
-                  </Button>
-                  {import.meta.env.DEV && (
-                    <p className="text-xs text-center text-muted-foreground">
-                      Dev: admin / admin123
-                    </p>
-                  )}
-                </form>
+                <Form {...loginForm}>
+                  <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
+                    <FormField control={loginForm.control} name="username" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl><Input {...field} data-testid="input-login-username" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={loginForm.control} name="password" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl><Input type="password" {...field} data-testid="input-login-password" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    {loginError && (
+                      <p className="text-sm text-destructive" data-testid="text-login-error">
+                        {(loginError as Error).message?.includes("401") ? "Invalid username or password" : "Login failed"}
+                      </p>
+                    )}
+                    <Button type="submit" className="w-full" disabled={loginForm.formState.isSubmitting} data-testid="button-login">
+                      {loginForm.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Sign In
+                    </Button>
+                    {import.meta.env.DEV && (
+                      <p className="text-xs text-center text-muted-foreground">
+                        Dev: admin / admin123
+                      </p>
+                    )}
+                  </form>
+                </Form>
               </CardContent>
             </Card>
           </TabsContent>
@@ -105,48 +118,49 @@ export default function AuthPage() {
                 <CardDescription>Join your team's workspace</CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleRegister} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-display">Display Name</Label>
-                    <Input
-                      id="reg-display"
-                      data-testid="input-reg-displayname"
-                      value={regData.displayName}
-                      onChange={(e) => setRegData({ ...regData, displayName: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-username">Username</Label>
-                    <Input
-                      id="reg-username"
-                      data-testid="input-reg-username"
-                      value={regData.username}
-                      onChange={(e) => setRegData({ ...regData, username: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="reg-password">Password</Label>
-                    <Input
-                      id="reg-password"
-                      type="password"
-                      data-testid="input-reg-password"
-                      value={regData.password}
-                      onChange={(e) => setRegData({ ...regData, password: e.target.value })}
-                      required
-                    />
-                  </div>
-                  {registerError && (
-                    <p className="text-sm text-destructive" data-testid="text-register-error">
-                      {(registerError as Error).message?.includes("409") ? "Username already taken" : "Registration failed"}
-                    </p>
-                  )}
-                  <Button type="submit" className="w-full" disabled={isSubmitting} data-testid="button-register">
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                    Create Account
-                  </Button>
-                </form>
+                <Form {...registerForm}>
+                  <form onSubmit={registerForm.handleSubmit(handleRegister)} className="space-y-4">
+                    <FormField control={registerForm.control} name="displayName" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Display Name</FormLabel>
+                        <FormControl><Input {...field} data-testid="input-reg-displayname" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={registerForm.control} name="username" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Username</FormLabel>
+                        <FormControl><Input {...field} data-testid="input-reg-username" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={registerForm.control} name="password" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Password</FormLabel>
+                        <FormControl><Input type="password" {...field} data-testid="input-reg-password" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={registerForm.control} name="inviteToken" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Invite Token</FormLabel>
+                        <FormControl><Input {...field} placeholder="Paste your invite token" data-testid="input-reg-invite" /></FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    {registerError && (
+                      <p className="text-sm text-destructive" data-testid="text-register-error">
+                        {(registerError as Error).message?.includes("409") ? "Username already taken"
+                          : (registerError as Error).message?.includes("403") ? "Invalid or expired invite token"
+                          : "Registration failed"}
+                      </p>
+                    )}
+                    <Button type="submit" className="w-full" disabled={registerForm.formState.isSubmitting} data-testid="button-register">
+                      {registerForm.formState.isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                      Create Account
+                    </Button>
+                  </form>
+                </Form>
               </CardContent>
             </Card>
           </TabsContent>

@@ -1,11 +1,13 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, TrendingUp, TrendingDown, Activity, Car, Droplets, Users, Clock, AlertTriangle, Brain, Download, ArrowRight, Target, Shield } from 'lucide-react';
+import { StatCard } from '@/components/StatCard';
 import { useEntitlements } from "@/lib/useEntitlements";
 import { LockedFeature } from "@/components/LockedFeature";
 
@@ -22,31 +24,6 @@ function MiniBar({ label, value, max, color = "bg-primary" }: { label: string; v
   );
 }
 
-function StatCard({ title, value, subtitle, icon: Icon, color = "text-primary", trend }: any) {
-  return (
-    <Card className="glass-panel" data-testid={`stat-${title.toLowerCase().replace(/\s/g,'-')}`}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">{title}</p>
-            <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
-          </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Icon className={`h-5 w-5 ${color}`} />
-          </div>
-        </div>
-        {trend && (
-          <p className={`text-xs mt-2 flex items-center gap-1 ${trend.positive ? 'text-green-400' : 'text-red-400'}`}>
-            {trend.positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {trend.text}
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function AnalyticsPage() {
   const { hasFeature } = useEntitlements();
   const [trendDays, setTrendDays] = React.useState(30);
@@ -58,12 +35,11 @@ export default function AnalyticsPage() {
   const { data: summaryData } = useQuery({ queryKey: ["/api/analytics/summary"] });
   const { data: kpiData } = useQuery<{ kpis: Record<string, { value: number; unit: string }> }>({
     queryKey: ["/api/kpi/compute"],
-    queryFn: () => fetch('/api/kpi/compute', { credentials: 'include' }).then(r => r.json()),
     enabled: hasFeature("kpi_snapshots"),
   });
   const { data: trendsData } = useQuery<{ date: string; washes: number; evidence: number; notifications: number }[]>({
     queryKey: ["/api/analytics/trends", { days: trendDays }],
-    queryFn: () => fetch(`/api/analytics/trends?days=${trendDays}`, { credentials: 'include' }).then(r => r.json()),
+    queryFn: () => apiRequest("GET", `/api/analytics/trends?days=${trendDays}`).then(r => r.json()),
   });
 
   const vehicles = Array.isArray(vehiclesData) ? vehiclesData : [];

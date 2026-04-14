@@ -127,12 +127,6 @@ describe("Week-1 metrics collector", () => {
   it("does not count successful requests as failures", async () => {
     const { metricsCollector } = await import("../../server/observability/metrics.js");
     metricsCollector.reset();
-    // Reset monotonic counters for isolated test
-    Object.assign(metricsCollector.week1, {
-      authFailures: 0, publicFlowErrors: 0, importFailures: 0,
-      aiRequestFailures: 0, wsDisconnects: 0, proposalApplyFailures: 0,
-      exportFailures: 0, feedbackSubmitted: 0,
-    });
 
     metricsCollector.recordRequest({
       method: "POST",

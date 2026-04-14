@@ -3,7 +3,7 @@
  */
 export { db } from "../db.js";
 import { eq as _eq, and as _and, type Column } from "drizzle-orm";
-export { eq, desc, and, sql, isNull, or, gte, lt } from "drizzle-orm";
+export { eq, desc, and, sql, isNull, or, gte, lt, inArray } from "drizzle-orm";
 import { getWorkspaceScope as _gws } from "../middleware/workspaceContext.js";
 export { getWorkspaceScope } from "../middleware/workspaceContext.js";
 

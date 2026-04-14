@@ -118,7 +118,7 @@ import {
   CAPABILITIES,
   CAPABILITY_CATALOG,
   isValidCapability,
-  type _CapabilityKey,
+  type CapabilityKey as _CapabilityKey,
 } from "../../server/capabilities/engine.js";
 
 describe("Phase 4.2A — Capability catalog", () => {
@@ -304,7 +304,7 @@ import path from "path";
 describe("Phase 4.2A — Migration file structure", () => {
   const migrationPath = path.resolve(
     import.meta.dirname ?? ".",
-    "../../supabase/migrations/20260407_011_phase42a_metering_capabilities_stations.sql",
+    "../../supabase/migrations/20260407070000_014_phase42a_metering_capabilities_stations.sql",
   );
   let sql: string;
 

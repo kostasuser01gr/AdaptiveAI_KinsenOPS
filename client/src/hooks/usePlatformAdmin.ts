@@ -16,7 +16,6 @@ export function useAppGraphVersions() {
     createdAt: string;
   }>>({
     queryKey: ['/api/app-graph/versions'],
-    queryFn: () => fetch('/api/app-graph/versions', { credentials: 'include' }).then(r => r.json()),
   });
 }
 
@@ -33,7 +32,6 @@ export function useLatestAppGraph() {
     createdAt: string;
   } | null>({
     queryKey: ['/api/app-graph/latest'],
-    queryFn: () => fetch('/api/app-graph/latest', { credentials: 'include' }).then(r => r.json()),
   });
 }
 
@@ -93,7 +91,6 @@ export function useInstalledExtensions() {
     installedAt: string;
   }>>({
     queryKey: ['/api/extensions'],
-    queryFn: () => fetch('/api/extensions', { credentials: 'include' }).then(r => r.json()),
   });
 }
 
@@ -134,7 +131,6 @@ export function useUninstallExtension() {
 export function useAiProviders() {
   return useQuery<Array<{ provider: string; models: string[] }>>({
     queryKey: ['/api/ai/providers'],
-    queryFn: () => fetch('/api/ai/providers', { credentials: 'include' }).then(r => r.json()),
   });
 }
 
@@ -159,6 +155,5 @@ export function useAiUsageStats() {
     createdAt: string;
   }>>({
     queryKey: ['/api/ai/usage'],
-    queryFn: () => fetch('/api/ai/usage', { credentials: 'include' }).then(r => r.json()),
   });
 }

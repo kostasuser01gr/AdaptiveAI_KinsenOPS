@@ -35,6 +35,7 @@ export default function OpsInboxPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
     },
+    onError: (err: Error) => toast({ title: "Failed to mark as read", description: err.message, variant: "destructive" }),
   });
 
   const markAllReadMutation = useMutation({
@@ -45,6 +46,7 @@ export default function OpsInboxPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ops-inbox/stats"] });
     },
+    onError: (err: Error) => toast({ title: "Failed to mark all as read", description: err.message, variant: "destructive" }),
   });
 
   const assignMutation = useMutation({
@@ -68,21 +70,21 @@ export default function OpsInboxPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/entity-rooms"] });
       toast({ title: "Escalated", description: "War Room created for this item." });
     },
+    onError: (err: Error) => toast({ title: "Escalation failed", description: err.message, variant: "destructive" }),
   });
 
   const actionMutation = useMutation({
     mutationFn: async ({ id, action }: { id: number; action: string }) => {
-      await apiRequest("PATCH", `/api/notifications/${id}`, {
-        metadata: { actionTaken: action, actionBy: user?.id, actionAt: new Date().toISOString() },
+      await apiRequest("POST", `/api/notifications/${id}/action`, {
+        action: action === 'resolve' ? 'resolve' : action === 'dismiss' ? 'dismiss' : 'acknowledge',
       });
-      // Auto-resolve after action
-      await apiRequest("PATCH", `/api/notifications/${id}/assign`, { status: 'resolved' });
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ops-inbox/stats"] });
       toast({ title: `Action: ${variables.action}`, description: "Notification resolved." });
     },
+    onError: (err: Error) => toast({ title: "Action failed", description: err.message, variant: "destructive" }),
   });
 
   const items = Array.isArray(notifications) ? notifications : [];

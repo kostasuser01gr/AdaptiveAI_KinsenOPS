@@ -5,8 +5,11 @@
 import type { Express } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
+import { VEHICLE_STATUSES } from "../../shared/schema.js";
 import { storage } from "../storage.js";
 import { wsManager } from "../websocket.js";
+import { configResolver } from "../config/resolver.js";
+import { logger } from "../observability/logger.js";
 
 // ─── CONSTANTS ───
 export const SHIFT_MANAGERS = ["admin", "coordinator", "supervisor"];
@@ -16,9 +19,20 @@ export const ALLOWED_CONTEXT_KEYS = [
   'screen', 'role', 'entityType', 'entityId',
 ];
 
+// Defaults — overridden at runtime by configResolver
 export const AI_MAX_MESSAGES = 20;
 export const AI_MAX_MESSAGE_CHARS = 4000;
 export const AI_MAX_TOTAL_CHARS = 40000;
+
+/** Runtime-resolved AI limits (reads from workspace config with defaults). */
+export async function getAiLimits() {
+  const [maxMessages, maxChars, maxTotal] = await Promise.all([
+    configResolver.getNumber("ai.max_messages_per_request"),
+    configResolver.getNumber("ai.max_chars_per_message"),
+    configResolver.getNumber("ai.max_total_chars_per_request"),
+  ]);
+  return { maxMessages, maxChars, maxTotal };
+}
 
 // ─── ANTHROPIC CLIENT (lazy singleton) ───
 let _anthropic: Anthropic | null = null;
@@ -35,10 +49,10 @@ export const vehiclePatchSchema = z.object({
   model: z.string().optional(),
   category: z.string().optional(),
   stationId: z.number().nullable().optional(),
-  status: z.string().optional(),
+  status: z.enum(VEHICLE_STATUSES).optional(),
   sla: z.string().optional(),
-  mileage: z.number().nullable().optional(),
-  fuelLevel: z.number().nullable().optional(),
+  mileage: z.number().nonnegative().nullable().optional(),
+  fuelLevel: z.number().min(0).max(100).nullable().optional(),
   nextBooking: z.string().nullable().optional(),
   timerInfo: z.string().nullable().optional(),
 }).strict();
@@ -76,11 +90,26 @@ export const stationPatchSchema = z.object({
   config: z.record(z.string(), z.unknown()).nullable().optional(),
 }).strict();
 
+// ─── Automation JSONB schemas ────────────────────────────────────────────────
+
+export const automationConditionSchema = z.record(
+  z.string().max(100),
+  z.union([z.string(), z.number(), z.boolean(), z.array(z.union([z.string(), z.number()]))])
+);
+
+export const automationActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("send_notification"), title: z.string().max(200).optional(), body: z.string().max(2000).optional(), severity: z.enum(["info", "warning", "error", "critical"]).optional(), audience: z.string().max(50).optional(), recipientRole: z.string().max(50).nullable().optional() }),
+  z.object({ type: z.literal("update_vehicle_status"), vehicleId: z.number().int().positive(), status: z.string().max(50) }),
+  z.object({ type: z.literal("create_room"), title: z.string().max(200).optional(), priority: z.enum(["low", "normal", "high", "critical"]).optional() }),
+  z.object({ type: z.literal("create_incident"), title: z.string().max(200).optional(), severity: z.enum(["low", "medium", "high", "critical"]).optional(), category: z.string().max(100).optional() }),
+  z.object({ type: z.literal("log_event"), eventAction: z.string().max(200).optional() }),
+]);
+
 export const automationRulePatchSchema = z.object({
   name: z.string().optional(),
   trigger: z.string().optional(),
-  conditions: z.record(z.string(), z.unknown()).nullable().optional(),
-  actions: z.array(z.record(z.string(), z.unknown())).optional(),
+  conditions: automationConditionSchema.nullable().optional(),
+  actions: z.array(automationActionSchema).max(20).optional(),
   active: z.boolean().optional(),
   scope: z.string().optional(),
 }).strict();
@@ -159,6 +188,7 @@ export const INCIDENT_TRANSITIONS: Record<string, string[]> = {
 };
 
 export const RESERVATION_TRANSITIONS: Record<string, string[]> = {
+  pending: ['confirmed', 'cancelled'],
   confirmed: ['checked_out', 'cancelled', 'no_show'],
   checked_out: ['returned'],
   returned: [],
@@ -322,17 +352,30 @@ export async function executeAutomationRule(
   }
 }
 
+function matchesConditions(conditions: Record<string, unknown> | null | undefined, context: Record<string, unknown>): boolean {
+  if (!conditions || Object.keys(conditions).length === 0) return true;
+  return Object.entries(conditions).every(([key, expected]) => {
+    const actual = context[key];
+    if (Array.isArray(expected)) return expected.includes(actual);
+    return actual === expected;
+  });
+}
+
 export async function evaluateAutomationRules(
   trigger: string,
   context: Record<string, unknown> = {}
 ) {
   try {
     const allRules = await storage.getAutomationRules();
-    const matchingRules = allRules.filter(r => r.active && r.trigger === trigger);
+    const matchingRules = allRules.filter(r =>
+      r.active && r.trigger === trigger && matchesConditions(r.conditions as Record<string, unknown> | null, context)
+    );
     for (const rule of matchingRules) {
-      executeAutomationRule(rule, context).catch(() => {});
+      executeAutomationRule(rule, context).catch((err) => {
+        logger.error('Automation rule execution failed', err instanceof Error ? err : new Error(String(err)), { ruleId: rule.id, trigger });
+      });
     }
-  } catch {
-    // Fire-and-forget — do not crash the caller
+  } catch (err) {
+    logger.error('Failed to evaluate automation rules', err instanceof Error ? err : new Error(String(err)), { trigger });
   }
 }

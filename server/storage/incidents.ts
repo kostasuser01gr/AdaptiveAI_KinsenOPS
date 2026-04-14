@@ -1,15 +1,16 @@
-import { db, eq, desc, and , wsFilter, wsInsert} from "./base.js";
+import { db, eq, desc, and , wsFilter, wsInsert, inArray} from "./base.js";
 import {
   incidents, type Incident, type InsertIncident,
   incidentSummaries, type InsertIncidentSummary,
 } from "../../shared/schema.js";
 
 export class IncidentStorage {
-  async getIncidents(filters?: { status?: string; severity?: string; stationId?: number; assignedTo?: number }) {
+  async getIncidents(filters?: { status?: string; severity?: string; stationId?: number; stationIds?: number[]; assignedTo?: number }) {
     const conditions = [];
     if (filters?.status) conditions.push(eq(incidents.status, filters.status));
     if (filters?.severity) conditions.push(eq(incidents.severity, filters.severity));
-    if (filters?.stationId) conditions.push(eq(incidents.stationId, filters.stationId));
+    if (filters?.stationIds?.length) conditions.push(inArray(incidents.stationId, filters.stationIds));
+    else if (filters?.stationId) conditions.push(eq(incidents.stationId, filters.stationId));
     if (filters?.assignedTo) conditions.push(eq(incidents.assignedTo, filters.assignedTo));
     if (conditions.length === 0) return db.select().from(incidents).where(wsFilter(incidents)).orderBy(desc(incidents.createdAt));
     if (conditions.length === 1) return db.select().from(incidents).where(and(conditions[0], wsFilter(incidents))).orderBy(desc(incidents.createdAt));

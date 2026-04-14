@@ -3,6 +3,7 @@ import {
   chatConversations, type InsertConversation,
   chatMessages, type InsertMessage,
 } from "../../shared/schema.js";
+import { withTransaction } from "../db.js";
 
 export class ChatStorage {
   async getConversations(userId: number) {
@@ -21,14 +22,21 @@ export class ChatStorage {
     return conv;
   }
   async deleteConversation(id: number) {
-    await db.delete(chatMessages).where(eq(chatMessages.conversationId, id));
-    await db.delete(chatConversations).where(and(eq(chatConversations.id, id), wsFilter(chatConversations)));
+    await withTransaction(async (tx) => {
+      await tx.delete(chatMessages).where(eq(chatMessages.conversationId, id));
+      await tx.delete(chatConversations).where(and(eq(chatConversations.id, id), wsFilter(chatConversations)));
+    });
   }
 
   async getMessages(conversationId: number) {
     return db.select().from(chatMessages).where(eq(chatMessages.conversationId, conversationId)).orderBy(chatMessages.createdAt);
   }
   async createMessage(data: InsertMessage) {
+    const [msg] = await db.insert(chatMessages).values(data).returning();
+    return msg;
+  }
+
+  async createMessageWithMetadata(data: InsertMessage & { metadata?: Record<string, unknown> }) {
     const [msg] = await db.insert(chatMessages).values(data).returning();
     return msg;
   }

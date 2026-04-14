@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/AppContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
@@ -10,19 +10,24 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Key, Settings as SettingsIcon, Workflow, ShieldCheck, Save, Brain, Bell, Smartphone, User } from 'lucide-react';
+import { Slider } from "@/components/ui/slider";
+import { Key, Settings as SettingsIcon, Workflow, ShieldCheck, Save, Brain, Bell, Smartphone, User, Download, Volume2, Palette, Check } from 'lucide-react';
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/useAuth";
+import { usePWA } from "@/components/pwa/InstallPrompt";
+import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
+import { NotificationPreferencesPanel } from "@/components/settings/NotificationPreferencesPanel";
 
 export default function SettingsPage() {
-  const { t, theme, toggleTheme, language, setLanguage, sidebarOpen, isMobile } = useApp();
+  const { t, theme, setTheme, language, setLanguage, sidebarOpen, isMobile, notificationSoundEnabled, setNotificationSoundEnabled, notificationVolume, setNotificationVolume } = useApp();
+  const { canInstall, isInstalled, triggerInstall } = usePWA();
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: prefs } = useQuery<any[]>({ queryKey: ["/api/user-preferences"] });
-  const { data: memoryData } = useQuery<any[]>({ queryKey: ["/api/workspace-memory"] });
+  const { data: prefs, isLoading: loadingPrefs } = useQuery<any[]>({ queryKey: ["/api/user-preferences"] });
+  const { data: memoryData, isLoading: loadingMemory } = useQuery<any[]>({ queryKey: ["/api/workspace-memory"] });
   const memories = Array.isArray(memoryData) ? memoryData : [];
   const savePref = useMutation({
     mutationFn: async (data: { category: string; key: string; value: any }) => {
@@ -32,6 +37,7 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/user-preferences"] });
       toast({ title: "Preference saved" });
     },
+    onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
 
   const allPrefs = Array.isArray(prefs) ? prefs : [];
@@ -41,11 +47,15 @@ export default function SettingsPage() {
   };
 
   const handleSave = () => {
-    toast({
-      title: "Settings saved",
-      description: "Your workspace preferences have been updated.",
-    });
+    savePref.mutate({ category: 'workspace', key: 'company_name', value: companyName });
   };
+
+  const [companyName, setCompanyName] = useState('DriveAI Car Rentals');
+
+  useEffect(() => {
+    const saved = getPref('workspace', 'company_name', null);
+    if (saved) setCompanyName(saved);
+  }, [allPrefs.length]);
 
   return (
     <div className="flex flex-col h-full bg-background relative overflow-hidden">
@@ -150,18 +160,77 @@ export default function SettingsPage() {
               <TabsContent value="general" className="m-0 space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Appearance & Locale</CardTitle>
-                    <CardDescription>Manage how DriveAI looks and feels for you.</CardDescription>
+                    <CardTitle className="flex items-center gap-2"><Palette className="h-5 w-5" /> Theme Gallery</CardTitle>
+                    <CardDescription>Choose a visual theme for your workspace.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      {([
+                        { id: 'light' as const, label: 'Light', colors: ['#fff', '#f5f5f5', '#7c3aed'] },
+                        { id: 'dark' as const, label: 'Dark Glass', colors: ['#111', '#1a1a1a', '#8b5cf6'] },
+                        { id: 'midnight' as const, label: 'Midnight', colors: ['#0a0e1a', '#141a2e', '#3b82f6'] },
+                        { id: 'sunset' as const, label: 'Sunset', colors: ['#1a110e', '#261a14', '#f59e0b'] },
+                        { id: 'ocean' as const, label: 'Ocean', colors: ['#0a1519', '#0e1f26', '#14b8a6'] },
+                        { id: 'forest' as const, label: 'Forest', colors: ['#0a1510', '#0e261a', '#22c55e'] },
+                      ] as const).map(t => (
+                        <button
+                          key={t.id}
+                          className={`relative flex flex-col gap-2 p-3 rounded-xl border-2 transition-all hover:scale-[1.02] ${theme === t.id ? 'border-primary ring-2 ring-primary/20' : 'border-border hover:border-primary/40'}`}
+                          onClick={() => setTheme(t.id)}
+                        >
+                          <div className="flex gap-1 h-8">
+                            {t.colors.map((c, i) => (
+                              <div key={i} className="flex-1 rounded-md" style={{ backgroundColor: c }} />
+                            ))}
+                          </div>
+                          <span className="text-xs font-medium">{t.label}</span>
+                          {theme === t.id && (
+                            <div className="absolute top-1.5 right-1.5 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
+                              <Check className="h-3 w-3 text-primary-foreground" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Volume2 className="h-5 w-5" /> Notification Sounds</CardTitle>
+                    <CardDescription>Configure audio alerts for notifications and events.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
                       <div className="space-y-0.5">
-                        <Label className="text-base">Dark Mode</Label>
-                        <p className="text-sm text-muted-foreground">Switch between light and dark themes.</p>
+                        <Label className="text-sm font-medium">Enable Sounds</Label>
+                        <p className="text-xs text-muted-foreground">Play audio when new notifications arrive.</p>
                       </div>
-                      <Switch checked={theme === 'dark'} onCheckedChange={toggleTheme} />
+                      <Switch checked={notificationSoundEnabled} onCheckedChange={setNotificationSoundEnabled} />
                     </div>
-                    
+                    {notificationSoundEnabled && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-sm">Volume</Label>
+                          <span className="text-xs text-muted-foreground">{Math.round(notificationVolume * 100)}%</span>
+                        </div>
+                        <Slider
+                          value={[notificationVolume]}
+                          onValueChange={([v]) => setNotificationVolume(v)}
+                          min={0} max={1} step={0.05}
+                          className="w-full"
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Locale</CardTitle>
+                    <CardDescription>Language and regional settings.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
                     <div className="flex flex-col space-y-2">
                       <Label className="text-base">Language</Label>
                       <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
@@ -176,6 +245,29 @@ export default function SettingsPage() {
                     </div>
                   </CardContent>
                 </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2"><Download className="h-5 w-5" /> Install App</CardTitle>
+                    <CardDescription>Install DriveAI as a native app on your device.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {isInstalled ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Check className="h-4 w-4 text-green-500" />
+                        <span>DriveAI is installed on this device.</span>
+                      </div>
+                    ) : canInstall ? (
+                      <Button onClick={triggerInstall} className="gap-2">
+                        <Download className="h-4 w-4" /> Install DriveAI
+                      </Button>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Open DriveAI in Chrome or Edge to install as an app.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               {/* Workspace Tab */}
@@ -188,10 +280,10 @@ export default function SettingsPage() {
                   <CardContent className="space-y-6">
                     <div className="grid gap-2">
                       <Label htmlFor="company">Company Name</Label>
-                      <Input id="company" defaultValue="DriveAI Car Rentals" />
+                      <Input id="company" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
                     </div>
-                    <Button onClick={handleSave}>
-                      <Save className="w-4 h-4 mr-2" /> Save Changes
+                    <Button onClick={handleSave} disabled={savePref.isPending}>
+                      <Save className="w-4 h-4 mr-2" /> {savePref.isPending ? 'Saving…' : 'Save Changes'}
                     </Button>
                   </CardContent>
                 </Card>
@@ -296,21 +388,7 @@ export default function SettingsPage() {
 
               {/* API Keys Tab */}
               <TabsContent value="keys" className="m-0 space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>API Keys</CardTitle>
-                    <CardDescription>Manage API keys for third-party integrations.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/20">
-                      <Key className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium">No API keys configured</p>
-                        <p className="text-xs text-muted-foreground">API key management will be available when external integrations are enabled for your workspace.</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <ApiKeysManager />
               </TabsContent>
 
               {/* Memory Tab */}
@@ -321,7 +399,11 @@ export default function SettingsPage() {
                     <CardDescription>Knowledge the AI assistant has learned about your workspace operations.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {memories.length > 0 ? (
+                    {loadingMemory ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Brain className="h-5 w-5 animate-pulse text-muted-foreground" />
+                      </div>
+                    ) : memories.length > 0 ? (
                       <>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                           <Brain className="h-4 w-4" />
@@ -360,48 +442,23 @@ export default function SettingsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle>Notification Preferences</CardTitle>
-                    <CardDescription>Configure how and when you receive notifications.</CardDescription>
+                    <CardDescription>Configure per-category notification channels.</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6">
+                  <CardContent className="space-y-4">
+                    <NotificationPreferencesPanel />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Sound</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
                     <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
                       <div className="space-y-0.5">
-                        <Label className="text-sm font-medium">Critical Alerts</Label>
-                        <p className="text-xs text-muted-foreground">Always receive critical severity notifications immediately.</p>
+                        <Label className="text-sm font-medium">Notification Sound</Label>
+                        <p className="text-xs text-muted-foreground">Play a sound when notifications arrive.</p>
                       </div>
-                      <Switch
-                        checked={getPref('notifications', 'critical_alerts', true)}
-                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'critical_alerts', value: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
-                      <div className="space-y-0.5">
-                        <Label className="text-sm font-medium">Queue Updates</Label>
-                        <p className="text-xs text-muted-foreground">Notify when wash queue status changes.</p>
-                      </div>
-                      <Switch
-                        checked={getPref('notifications', 'queue_updates', true)}
-                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'queue_updates', value: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
-                      <div className="space-y-0.5">
-                        <Label className="text-sm font-medium">Shift Reminders</Label>
-                        <p className="text-xs text-muted-foreground">Receive reminders about upcoming shift changes.</p>
-                      </div>
-                      <Switch
-                        checked={getPref('notifications', 'shift_reminders', true)}
-                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'shift_reminders', value: checked })}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between p-4 border rounded-lg bg-card/50">
-                      <div className="space-y-0.5">
-                        <Label className="text-sm font-medium">Email Digest</Label>
-                        <p className="text-xs text-muted-foreground">Receive a daily summary of notifications via email.</p>
-                      </div>
-                      <Switch
-                        checked={getPref('notifications', 'email_digest', false)}
-                        onCheckedChange={(checked) => savePref.mutate({ category: 'notifications', key: 'email_digest', value: checked })}
-                      />
+                      <Switch checked={notificationSoundEnabled} onCheckedChange={setNotificationSoundEnabled} />
                     </div>
                   </CardContent>
                 </Card>

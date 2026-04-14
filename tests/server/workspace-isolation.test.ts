@@ -211,7 +211,7 @@ describe("Schema workspace coverage", () => {
 
   it("workspaces master table exists with required columns", async () => {
     const schema = await import("../../shared/schema.js");
-    const ws = schema.workspaces as Record<string, { name?: string }>;
+    const ws = schema.workspaces as unknown as Record<string, { name?: string }>;
     expect(ws).toBeDefined();
     expect(ws.id?.name).toBe("id");
     expect(ws.name?.name).toBe("name");
@@ -264,7 +264,7 @@ describe("Express workspace middleware contract", () => {
 describe("Migration SQL contract", () => {
   it("migration file exists and contains workspace_id additions", async () => {
     const fs = await import("fs");
-    const path = "supabase/migrations/20260410000000_004_workspace_isolation.sql";
+    const path = "supabase/migrations/20260410010000_018_workspace_isolation.sql";
     const content = fs.readFileSync(path, "utf8");
 
     // Must create workspaces table
@@ -332,7 +332,7 @@ describe("Per-workspace uniqueness (hardening audit A)", () => {
 
   it("migration includes per-workspace unique index conversions for users/stations/vehicles", async () => {
     const fs = await import("fs");
-    const content = fs.readFileSync("supabase/migrations/20260410000000_004_workspace_isolation.sql", "utf8");
+    const content = fs.readFileSync("supabase/migrations/20260410010000_018_workspace_isolation.sql", "utf8");
     expect(content).toContain("users_ws_username_idx");
     expect(content).toContain("stations_ws_code_idx");
     expect(content).toContain("vehicles_ws_plate_idx");
@@ -340,7 +340,7 @@ describe("Per-workspace uniqueness (hardening audit A)", () => {
 
   it("vehicleEvents dedupe index includes workspaceId", async () => {
     const fs = await import("fs");
-    const content = fs.readFileSync("supabase/migrations/20260410000000_004_workspace_isolation.sql", "utf8");
+    const content = fs.readFileSync("supabase/migrations/20260410010000_018_workspace_isolation.sql", "utf8");
     expect(content).toMatch(/ve_external_dedup_idx.*workspace_id/);
   });
 });

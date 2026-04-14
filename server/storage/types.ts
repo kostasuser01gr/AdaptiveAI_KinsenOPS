@@ -63,6 +63,12 @@ import type {
   AppGraphVersion, InsertAppGraphVersion,
   AiModelUsage, InsertAiModelUsage,
   InstalledExtension, InsertInstalledExtension,
+  InviteToken, InsertInviteToken,
+  UserTab, InsertUserTab,
+  WidgetDefinition, InsertWidgetDefinition,
+  TabWidget, InsertTabWidget,
+  IdeaComment, InsertIdeaComment,
+  IdeaAttachment, InsertIdeaAttachment,
 } from "../../shared/schema.js";
 
 export interface IStorage {
@@ -74,6 +80,7 @@ export interface IStorage {
   getUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
+  updateUserUnscoped(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
   deleteUser(id: number): Promise<void>;
 
   // User preferences
@@ -92,7 +99,7 @@ export interface IStorage {
   createMessage(data: InsertMessage): Promise<ChatMessage>;
 
   // Vehicles
-  getVehicles(): Promise<Vehicle[]>;
+  getVehicles(filters?: { stationIds?: number[] }): Promise<Vehicle[]>;
   getVehicle(id: number): Promise<Vehicle | undefined>;
   createVehicle(data: InsertVehicle): Promise<Vehicle>;
   updateVehicle(id: number, data: Partial<InsertVehicle>): Promise<Vehicle | undefined>;
@@ -218,7 +225,7 @@ export interface IStorage {
   getFeedback(): Promise<Feedback[]>;
 
   // Incidents
-  getIncidents(filters?: { status?: string; severity?: string; stationId?: number; assignedTo?: number }): Promise<Incident[]>;
+  getIncidents(filters?: { status?: string; severity?: string; stationId?: number; stationIds?: number[]; assignedTo?: number }): Promise<Incident[]>;
   getIncident(id: number): Promise<Incident | undefined>;
   createIncident(data: InsertIncident): Promise<Incident>;
   updateIncident(id: number, data: Partial<Incident>): Promise<Incident | undefined>;
@@ -226,13 +233,13 @@ export interface IStorage {
   createIncidentSummary(data: InsertIncidentSummary): Promise<IncidentSummary>;
 
   // Reservations
-  getReservations(filters?: { vehicleId?: number; stationId?: number; status?: string }): Promise<Reservation[]>;
+  getReservations(filters?: { vehicleId?: number; stationId?: number; stationIds?: number[]; status?: string }): Promise<Reservation[]>;
   getReservation(id: number): Promise<Reservation | undefined>;
   createReservation(data: InsertReservation): Promise<Reservation>;
   updateReservation(id: number, data: Partial<Reservation>): Promise<Reservation | undefined>;
 
   // Repair orders
-  getRepairOrders(filters?: { vehicleId?: number; incidentId?: number; status?: string; stationId?: number }): Promise<RepairOrder[]>;
+  getRepairOrders(filters?: { vehicleId?: number; incidentId?: number; status?: string; stationId?: number; stationIds?: number[] }): Promise<RepairOrder[]>;
   getRepairOrder(id: number): Promise<RepairOrder | undefined>;
   createRepairOrder(data: InsertRepairOrder): Promise<RepairOrder>;
   updateRepairOrder(id: number, data: Partial<RepairOrder>): Promise<RepairOrder | undefined>;
@@ -422,6 +429,45 @@ export interface IStorage {
   getAnalyticsTrends(days: number): Promise<{ date: string; washes: number; evidence: number; notifications: number }[]>;
   getVehicleTrends(vehicleId: number): Promise<{ totalWashes: number; totalEvidence: number; recentWashes: { date: string; count: number }[]; recentEvidence: { date: string; count: number }[]; topZones: { zone: string; count: number }[] }>;
   searchEntities(query: string): Promise<Array<{ type: string; id: number | string; label: string; description?: string }>>;
+
+  // Invite tokens
+  createInviteToken(data: InsertInviteToken): Promise<InviteToken>;
+  getInviteTokenByToken(token: string): Promise<InviteToken | undefined>;
+  markInviteTokenUsed(id: number, usedBy: number): Promise<InviteToken | undefined>;
+  getInviteTokens(createdBy?: number): Promise<InviteToken[]>;
+  deleteInviteToken(id: number): Promise<void>;
+
+  // User tabs (Phase 6)
+  getUserTabs(userId: number): Promise<UserTab[]>;
+  getUserTab(id: number): Promise<UserTab | undefined>;
+  createUserTab(data: InsertUserTab): Promise<UserTab>;
+  updateUserTab(id: number, data: Partial<InsertUserTab>): Promise<UserTab | undefined>;
+  deleteUserTab(id: number): Promise<void>;
+  reorderUserTabs(userId: number, tabIds: number[]): Promise<void>;
+
+  // Widget definitions (Phase 6)
+  getWidgetDefinitions(category?: string): Promise<WidgetDefinition[]>;
+  getWidgetDefinition(slug: string): Promise<WidgetDefinition | undefined>;
+  createWidgetDefinition(data: InsertWidgetDefinition): Promise<WidgetDefinition>;
+  updateWidgetDefinition(id: number, data: Partial<InsertWidgetDefinition>): Promise<WidgetDefinition | undefined>;
+
+  // Tab widgets (Phase 6)
+  getTabWidgets(tabId: number): Promise<TabWidget[]>;
+  createTabWidget(data: InsertTabWidget): Promise<TabWidget>;
+  updateTabWidget(id: number, data: Partial<InsertTabWidget>): Promise<TabWidget | undefined>;
+  deleteTabWidget(id: number): Promise<void>;
+  bulkUpdateTabWidgetLayout(tabId: number, layouts: Array<{ id: number; x: number; y: number; w: number; h: number }>): Promise<void>;
+
+  // Idea comments (Phase 6)
+  getIdeaComments(proposalId: number): Promise<IdeaComment[]>;
+  createIdeaComment(data: InsertIdeaComment): Promise<IdeaComment>;
+  updateIdeaComment(id: number, content: string): Promise<IdeaComment | undefined>;
+  deleteIdeaComment(id: number): Promise<void>;
+
+  // Idea attachments (Phase 6)
+  getIdeaAttachments(proposalId: number): Promise<IdeaAttachment[]>;
+  createIdeaAttachment(data: InsertIdeaAttachment): Promise<IdeaAttachment>;
+  deleteIdeaAttachment(id: number): Promise<void>;
 }
 
 // Re-export all schema types for convenience
@@ -485,4 +531,10 @@ export type {
   AppGraphVersion, InsertAppGraphVersion,
   AiModelUsage, InsertAiModelUsage,
   InstalledExtension, InsertInstalledExtension,
+  InviteToken, InsertInviteToken,
+  UserTab, InsertUserTab,
+  WidgetDefinition, InsertWidgetDefinition,
+  TabWidget, InsertTabWidget,
+  IdeaComment, InsertIdeaComment,
+  IdeaAttachment, InsertIdeaAttachment,
 };

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { z } from "zod/v4";
+import DOMPurify from "isomorphic-dompurify";
 type ZodSchema = z.ZodType;
 
 export function validateRequest(schema: {
@@ -34,11 +35,32 @@ export function validateRequest(schema: {
   };
 }
 
+/**
+ * Shorthand for body-only validation — the most common case.
+ * Usage: `app.post('/api/foo', validateBody(insertFooSchema), handler)`
+ */
+export function validateBody(schema: ZodSchema) {
+  return validateRequest({ body: schema });
+}
+
+/**
+ * Shorthand for query-only validation — for GET endpoints.
+ * Usage: `app.get('/api/foo', validateQuery(paginationSchema), handler)`
+ */
+export function validateQuery(schema: ZodSchema) {
+  return validateRequest({ query: schema });
+}
+
 export function sanitizeInput(input: string): string {
-  return input
-    .replace(/<script[^>]*>.*?<\/script>/gis, '')
-    .replace(/<iframe[^>]*>.*?<\/iframe>/gis, '')
-    .replace(/javascript:/gi, '')
-    .replace(/on\w+\s*=/gi, '')
-    .trim();
+  return DOMPurify.sanitize(input, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] }).trim();
+}
+
+// ─── Reusable param schemas ──────────────────────────────────────────────────
+
+/** Validates that :id param is a positive integer. */
+export const idParamSchema = z.object({ id: z.coerce.number().int().positive() });
+
+/** Middleware: reject requests where :id is not a positive integer (returns 400). */
+export function validateIdParam() {
+  return validateRequest({ params: idParamSchema });
 }

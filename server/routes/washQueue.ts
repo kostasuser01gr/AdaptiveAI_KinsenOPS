@@ -2,10 +2,11 @@ import type { Express } from "express";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 import { wsManager } from "../websocket.js";
-import { publicWashQueueReadLimiter, publicWashQueueWriteLimiter } from "../middleware/rate-limiter.js";
+import { publicWashQueueReadLimiter } from "../middleware/rate-limiter.js";
 import { washQueuePatchSchema, evaluateAutomationRules } from "./_helpers.js";
 import { resolveStationScope } from "../middleware/stationScope.js";
 import { insertWashQueueSchema } from "../../shared/schema.js";
+import { validateIdParam } from "../middleware/validation.js";
 
 export function registerWashQueueRoutes(app: Express) {
   // PUBLIC wash-queue listing (washer tablet)
@@ -13,7 +14,7 @@ export function registerWashQueueRoutes(app: Express) {
     try { res.json(await storage.getWashQueue()); } catch (e) { next(e); }
   });
 
-  app.post("/api/wash-queue", publicWashQueueWriteLimiter, async (req, res, next) => {
+  app.post("/api/wash-queue", requireAuth, async (req, res, next) => {
     try {
       const data = insertWashQueueSchema.parse(req.body);
       // Calculate SLA deadline based on priority
@@ -40,10 +41,11 @@ export function registerWashQueueRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.delete("/api/wash-queue/:id", requireRole("admin", "supervisor"), async (req, res, next) => {
+  app.delete("/api/wash-queue/:id", requireRole("admin", "supervisor"), validateIdParam(), async (req, res, next) => {
     try {
-      await storage.deleteWashQueueItem(Number(req.params.id));
-      wsManager.broadcast({ type: 'wash:deleted', data: { id: Number(req.params.id) }, channel: 'wash-queue' });
+      const id = Number(req.params.id);
+      await storage.deleteWashQueueItem(id);
+      wsManager.broadcast({ type: 'wash:deleted', data: { id }, channel: 'wash-queue' });
       res.status(204).end();
     } catch (e) { next(e); }
   });
@@ -67,6 +69,41 @@ export function registerWashQueueRoutes(app: Express) {
       } else {
         res.json(allWash.filter(w => w.stationId === null || stationScope.includes(w.stationId as number)));
       }
+    } catch (e) { next(e); }
+  });
+
+  // ─── Priority score calculation (auto-rank queue items) ──────────────
+  app.get("/api/wash-queue/scored", requireAuth, async (_req, res, next) => {
+    try {
+      const items = await storage.getWashQueue();
+      const now = Date.now();
+      const scored = items
+        .filter(i => i.status !== 'completed' && i.status !== 'cancelled')
+        .map(item => {
+          let score = 0;
+          // Priority weight
+          if (item.priority === 'High') score += 40;
+          else if (item.priority === 'Medium') score += 20;
+          else score += 5;
+          // SLA urgency — boost items nearing or past deadline
+          if (item.slaDeadline) {
+            const remaining = new Date(item.slaDeadline).getTime() - now;
+            const hours = remaining / 3600000;
+            if (hours <= 0) score += 50; // already breached
+            else if (hours <= 1) score += 30;
+            else if (hours <= 2) score += 15;
+          }
+          // Wait time — older items get boosted (1 point per 30 min waiting)
+          if (item.createdAt) {
+            const waitMs = now - new Date(item.createdAt).getTime();
+            score += Math.min(20, Math.floor(waitMs / 1800000));
+          }
+          // VIP / category bonus
+          if (item.washType === 'full_detail') score += 10;
+          return { ...item, priorityScore: score };
+        })
+        .sort((a, b) => b.priorityScore - a.priorityScore);
+      res.json(scored);
     } catch (e) { next(e); }
   });
 }

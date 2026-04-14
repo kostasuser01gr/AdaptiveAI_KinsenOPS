@@ -4,6 +4,7 @@ import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 import { wsManager } from "../websocket.js";
 import { insertNotificationSchema } from "../../shared/schema.js";
+import { validateIdParam } from "../middleware/validation.js";
 
 export function registerNotificationRoutes(app: Express) {
   // NOTIFICATIONS
@@ -22,7 +23,7 @@ export function registerNotificationRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.patch("/api/notifications/:id/read", requireAuth, async (req, res, next) => {
+  app.patch("/api/notifications/:id/read", requireAuth, validateIdParam(), async (req, res, next) => {
     try {
       const userId = (req.user as Express.User).id;
       await storage.markNotificationRead(Number(req.params.id), userId);
@@ -44,7 +45,7 @@ export function registerNotificationRoutes(app: Express) {
     note: z.string().max(1000).optional(),
   }).strict();
 
-  app.post("/api/notifications/:id/action", requireAuth, async (req, res, next) => {
+  app.post("/api/notifications/:id/action", requireRole("admin", "supervisor", "coordinator", "agent"), async (req, res, next) => {
     try {
       const { action, note } = notificationActionSchema.parse(req.body);
       const userId = (req.user as Express.User).id;
@@ -92,7 +93,7 @@ export function registerNotificationRoutes(app: Express) {
     status: z.string().min(1).max(50).optional(),
   }).strict();
 
-  app.patch("/api/notifications/:id/assign", requireAuth, async (req, res, next) => {
+  app.patch("/api/notifications/:id/assign", requireRole("admin", "supervisor", "coordinator"), async (req, res, next) => {
     try {
       const id = Number(req.params.id);
       const parsed = notificationAssignSchema.parse(req.body);
@@ -110,6 +111,14 @@ export function registerNotificationRoutes(app: Express) {
   app.post("/api/notifications/:id/escalate", requireAuth, async (req, res, next) => {
     try {
       const id = Number(req.params.id);
+      const userId = (req.user as Express.User).id;
+      const userRole = (req.user as Express.User).role;
+      // Only the notification's recipient or admins/supervisors may escalate
+      const existing = await storage.getNotification(id);
+      if (!existing) return res.status(404).json({ error: 'Notification not found' });
+      if (existing.recipientUserId !== userId && userRole !== 'admin' && userRole !== 'supervisor') {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
       const notif = await storage.updateNotification(id, { status: 'escalated' } as any);
       if (!notif) return res.status(404).json({ error: 'Notification not found' });
       const room = await storage.createEntityRoom({

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Zap, Plus, Play, Trash2, RefreshCw, AlertTriangle, CheckCircle2, Clock, ArrowRight, Lock, Globe, FlaskConical, History } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { MotionDialog } from "@/components/motion";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -62,23 +62,26 @@ export default function AutomationsPage() {
 
   const { data: executions } = useQuery({
     queryKey: ["/api/automation-executions", showHistory],
-    queryFn: async () => { const r = await fetch(`/api/automation-executions?ruleId=${showHistory}&limit=20`, { credentials: 'include' }); return r.json(); },
+    queryFn: () => apiRequest("GET", `/api/automation-executions?ruleId=${showHistory}&limit=20`).then(r => r.json()),
     enabled: !!showHistory,
   });
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", "/api/automation-rules", data); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/automation-rules"] }); setShowCreate(false); setNewName(''); setNewDesc(''); toast({ title: "Rule created" }); },
+    onError: (err: Error) => toast({ title: "Rule creation failed", description: err.message, variant: "destructive" }),
   });
 
   const toggleMutation = useMutation({
     mutationFn: async ({ id, active }: { id: number; active: boolean }) => { await apiRequest("PATCH", `/api/automation-rules/${id}`, { active }); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/automation-rules"] }); toast({ title: "Rule updated" }); },
+    onError: (err: Error) => toast({ title: "Toggle failed", description: err.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/automation-rules/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/automation-rules"] }); toast({ title: "Rule deleted" }); },
+    onError: (err: Error) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const executeMutation = useMutation({
@@ -131,15 +134,8 @@ export default function AutomationsPage() {
           <p className="text-sm text-muted-foreground">Event-driven rules with natural language, dry runs, scope control, and audit trails</p>
         </div>
         <div className="flex gap-2">
-          <Dialog open={showCreate} onOpenChange={setShowCreate}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" data-testid="button-create-rule"><Plus className="h-4 w-4" /> New Rule</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Create Automation Rule</DialogTitle>
-                <DialogDescription>Define trigger events, conditions, and automated actions.</DialogDescription>
-              </DialogHeader>
+          <Button className="gap-2" onClick={() => setShowCreate(true)} data-testid="button-create-rule"><Plus className="h-4 w-4" /> New Rule</Button>
+          <MotionDialog open={showCreate} onOpenChange={setShowCreate} title="Create Automation Rule" description="Define trigger events, conditions, and automated actions." className="max-w-lg">
               <div className="space-y-4 mt-4">
                 <Input placeholder="Rule name..." value={newName} onChange={e => setNewName(e.target.value)} data-testid="input-rule-name" />
                 <Textarea placeholder="Describe what this rule does..." value={newDesc} onChange={e => setNewDesc(e.target.value)} data-testid="input-rule-desc" />
@@ -190,8 +186,7 @@ export default function AutomationsPage() {
                   Create Rule
                 </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+          </MotionDialog>
         </div>
       </div>
 
@@ -321,15 +316,9 @@ export default function AutomationsPage() {
         </div>
       </ScrollArea>
 
-      <Dialog open={showDryRun} onOpenChange={setShowDryRun}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><FlaskConical className="h-5 w-5 text-primary" /> Dry Run Validation</DialogTitle>
-            <DialogDescription>Testing rule structure and scope against live data.</DialogDescription>
-          </DialogHeader>
+      <MotionDialog open={showDryRun} onOpenChange={setShowDryRun} title="Dry Run Validation" description="Testing rule structure and scope against live data.">
           <DryRunContent ruleId={dryRunId} rules={allRules} onClose={() => setShowDryRun(false)} />
-        </DialogContent>
-      </Dialog>
+      </MotionDialog>
     </div>
   );
 }
@@ -337,8 +326,11 @@ export default function AutomationsPage() {
 function DryRunContent({ ruleId, rules, onClose }: { ruleId: number | null; rules: any[]; onClose: () => void }) {
   const { data: result, isLoading } = useQuery<{ valid: boolean; errors: string[]; matchingEntities: number }>({
     queryKey: ["/api/automation-rules", ruleId, "test"],
-    queryFn: () => fetch(`/api/automation-rules/${ruleId}/test`, { method: 'POST', credentials: 'include' }).then(r => r.json()),
+    queryFn: () => apiRequest("POST", `/api/automation-rules/${ruleId}/test`).then(r => r.json()),
     enabled: !!ruleId,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
   const rule = rules.find((r: any) => r.id === ruleId);

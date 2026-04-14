@@ -1,5 +1,17 @@
-import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import rateLimit, { ipKeyGenerator, type Store } from "express-rate-limit";
 import type { Request } from "express";
+import { redis } from "../redis.js";
+
+// Conditional Redis store — falls back to in-memory when Redis is unavailable
+let redisStore: Store | undefined;
+if (redis) {
+  try {
+    const { default: RedisStore } = await import("rate-limit-redis");
+    redisStore = new RedisStore({ sendCommand: ((...args: string[]) => redis!.call(...(args as [string, ...string[]]))) as any });
+  } catch {
+    // rate-limit-redis unavailable — fall back to in-memory
+  }
+}
 
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -8,6 +20,7 @@ export const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
+  store: redisStore,
 });
 
 export const apiLimiter = rateLimit({
@@ -16,6 +29,7 @@ export const apiLimiter = rateLimit({
   message: { message: "Too many requests, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore,
   keyGenerator: (req: Request) => {
     if (req.user) {
       return `user-${(req.user as Express.User).id}`;
@@ -30,6 +44,7 @@ export const aiChatLimiter = rateLimit({
   message: { message: "Too many AI chat requests, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore,
   keyGenerator: (req: Request) => {
     if (req.user) {
       return `ai-${(req.user as Express.User).id}`;
@@ -44,6 +59,7 @@ export const searchLimiter = rateLimit({
   message: { message: "Too many search requests, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore,
 });
 
 export const publicWashQueueReadLimiter = rateLimit({
@@ -52,6 +68,7 @@ export const publicWashQueueReadLimiter = rateLimit({
   message: { message: "Too many wash queue requests, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore,
 });
 
 export const publicWashQueueWriteLimiter = rateLimit({
@@ -60,6 +77,7 @@ export const publicWashQueueWriteLimiter = rateLimit({
   message: { message: "Too many wash queue submissions, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore,
 });
 
 export const publicEvidenceLimiter = rateLimit({
@@ -68,6 +86,7 @@ export const publicEvidenceLimiter = rateLimit({
   message: { message: "Too many evidence uploads, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore,
 });
 
 export const webhookLimiter = rateLimit({
@@ -76,4 +95,5 @@ export const webhookLimiter = rateLimit({
   message: { message: "Too many webhook requests, please slow down" },
   standardHeaders: true,
   legacyHeaders: false,
+  store: redisStore,
 });

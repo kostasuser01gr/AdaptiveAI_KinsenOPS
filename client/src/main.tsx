@@ -2,6 +2,9 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { initSentry } from "./lib/sentry";
+
+initSentry();
 
 // Register Service Worker for PWA with update detection (production only)
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

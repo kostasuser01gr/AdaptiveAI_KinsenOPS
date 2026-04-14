@@ -5,6 +5,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { storage } from "../storage.js";
 import { getWorkspaceScope } from "../middleware/workspaceContext.js";
+import { config } from "../config.js";
 
 // ─── Provider Adapter Interface ───
 export interface ModelAdapter {
@@ -69,7 +70,7 @@ class ModelGateway {
 
   constructor() {
     // Register built-in adapters
-    if (process.env.ANTHROPIC_API_KEY) {
+    if (config.anthropicApiKey) {
       this.register(new AnthropicAdapter());
     }
   }

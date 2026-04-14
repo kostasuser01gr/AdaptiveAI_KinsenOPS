@@ -4,6 +4,7 @@ import {
   channelMembers, type InsertChannelMember,
   channelMessages, type InsertChannelMessage,
   channelReactions, type InsertChannelReaction,
+  users,
 } from "../../shared/schema.js";
 
 export class ChannelStorage {
@@ -36,7 +37,20 @@ export class ChannelStorage {
 
   // ─── Members ───
   async getChannelMembers(channelId: number) {
-    return db.select().from(channelMembers).where(eq(channelMembers.channelId, channelId));
+    return db.select({
+      id: channelMembers.id,
+      channelId: channelMembers.channelId,
+      userId: channelMembers.userId,
+      role: channelMembers.role,
+      muted: channelMembers.muted,
+      lastReadAt: channelMembers.lastReadAt,
+      joinedAt: channelMembers.joinedAt,
+      displayName: users.displayName,
+      username: users.username,
+      userRole: users.role,
+    }).from(channelMembers)
+      .innerJoin(users, eq(channelMembers.userId, users.id))
+      .where(eq(channelMembers.channelId, channelId));
   }
   async getUserChannels(userId: number) {
     return db.select().from(channelMembers).where(eq(channelMembers.userId, userId));
@@ -60,7 +74,21 @@ export class ChannelStorage {
   async getChannelMessages(channelId: number, limit = 50, before?: number) {
     const conditions = [eq(channelMessages.channelId, channelId)];
     if (before) conditions.push(gte(channelMessages.id, before));
-    return db.select().from(channelMessages)
+    return db.select({
+      id: channelMessages.id,
+      channelId: channelMessages.channelId,
+      userId: channelMessages.userId,
+      content: channelMessages.content,
+      replyToId: channelMessages.replyToId,
+      edited: channelMessages.edited,
+      editedAt: channelMessages.editedAt,
+      pinned: channelMessages.pinned,
+      metadata: channelMessages.metadata,
+      createdAt: channelMessages.createdAt,
+      displayName: users.displayName,
+      username: users.username,
+    }).from(channelMessages)
+      .innerJoin(users, eq(channelMessages.userId, users.id))
       .where(and(...conditions))
       .orderBy(desc(channelMessages.createdAt))
       .limit(limit);

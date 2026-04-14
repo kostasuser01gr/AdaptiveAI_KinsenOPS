@@ -10,10 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter,
-  DialogHeader, DialogTitle, DialogTrigger,
-} from '@/components/ui/dialog';
+import { MotionDialog } from '@/components/motion/MotionDialog';
 import { useToast } from '@/hooks/use-toast';
 import {
   Blocks, Plus, Play, Undo2, CheckCircle2, Clock, XCircle,
@@ -245,18 +242,12 @@ function CreateVersionDialog({ latestGraph }: { latestGraph: Record<string, unkn
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          New Version
-        </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Create Graph Version</DialogTitle>
-          <DialogDescription>Define the new app graph. Changes won't take effect until applied by an admin.</DialogDescription>
-        </DialogHeader>
+    <>
+      <Button size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+        <Plus className="h-4 w-4" />
+        New Version
+      </Button>
+      <MotionDialog open={open} onOpenChange={handleOpen} title="Create Graph Version" description="Define the new app graph. Changes won't take effect until applied by an admin." className="max-w-2xl">
         <div className="space-y-3">
           <Input
             placeholder="Version label (optional)"
@@ -275,15 +266,15 @@ function CreateVersionDialog({ latestGraph }: { latestGraph: Record<string, unkn
             </div>
           )}
         </div>
-        <DialogFooter>
+        <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
           <Button onClick={handleCreate} disabled={createMutation.isPending}>
             {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
             Save Draft
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </MotionDialog>
+    </>
   );
 }
 

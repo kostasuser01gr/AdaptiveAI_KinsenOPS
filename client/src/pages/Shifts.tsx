@@ -5,12 +5,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { CalendarDays, Copy, Wand2, CheckCircle2, History, Loader2, Send, Clock, Shield } from 'lucide-react';
+import { PulseOnChange } from '@/components/motion';
+import { Empty, EmptyContent, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/useAuth";
 import { useEntitlements } from "@/lib/useEntitlements";
 import { LockedFeature } from "@/components/LockedFeature";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { MotionDialog } from "@/components/motion";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Shift } from "@shared/schema";
@@ -52,6 +54,7 @@ export default function ShiftsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
       toast({ title: "Shift published" });
     },
+    onError: (err: Error) => toast({ title: "Publish failed", description: err.message, variant: "destructive" }),
   });
 
   const submitRequestMutation = useMutation({
@@ -64,6 +67,7 @@ export default function ShiftsPage() {
       setReqDetails('');
       toast({ title: "Request submitted", description: "Your shift request has been sent to the supervisor." });
     },
+    onError: (err: Error) => toast({ title: "Request failed", description: err.message, variant: "destructive" }),
   });
 
   const reviewRequestMutation = useMutation({
@@ -74,6 +78,7 @@ export default function ShiftsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/shift-requests"] });
       toast({ title: "Request reviewed" });
     },
+    onError: (err: Error) => toast({ title: "Review failed", description: err.message, variant: "destructive" }),
   });
 
   const rows = shifts || [];
@@ -82,12 +87,22 @@ export default function ShiftsPage() {
   const publishedCount = rows.filter(s => s.status === 'published').length;
   const pendingRequests = requests.filter((r: any) => r.status === 'pending');
 
-  const publishAll = () => {
-    rows.forEach(s => {
-      if (s.status === 'draft') {
-        publishMutation.mutate(s.id);
+  const publishAll = async () => {
+    const drafts = rows.filter(s => s.status === 'draft');
+    let failed = 0;
+    for (const s of drafts) {
+      try {
+        await apiRequest("POST", `/api/shifts/${s.id}/publish`, {});
+      } catch {
+        failed++;
       }
-    });
+    }
+    queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
+    if (failed > 0) {
+      toast({ title: `${failed} shift(s) failed to publish`, variant: "destructive" });
+    } else if (drafts.length > 0) {
+      toast({ title: `${drafts.length} shift(s) published` });
+    }
   };
 
   return (
@@ -109,15 +124,9 @@ export default function ShiftsPage() {
               <Button className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground" data-testid="button-autoplan"><Wand2 className="h-4 w-4" /> Auto-Plan</Button>
             </>
           ) : (
-            <Dialog open={showRequest} onOpenChange={setShowRequest}>
-              <DialogTrigger asChild>
-                <Button className="gap-2" data-testid="button-submit-request"><Send className="h-4 w-4" /> Submit Request</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Shift Request</DialogTitle>
-                  <DialogDescription>Submit a request to your supervisor. They will review and respond.</DialogDescription>
-                </DialogHeader>
+            <>
+              <Button className="gap-2" onClick={() => setShowRequest(true)} data-testid="button-submit-request"><Send className="h-4 w-4" /> Submit Request</Button>
+              <MotionDialog open={showRequest} onOpenChange={setShowRequest} title="Shift Request" description="Submit a request to your supervisor. They will review and respond.">
                 <div className="space-y-4 mt-4">
                   <Select value={reqType} onValueChange={setReqType}>
                     <SelectTrigger data-testid="select-request-type"><SelectValue /></SelectTrigger>
@@ -130,13 +139,13 @@ export default function ShiftsPage() {
                     </SelectContent>
                   </Select>
                   <Textarea placeholder="Describe your request..." value={reqDetails} onChange={e => setReqDetails(e.target.value)} data-testid="input-request-details" />
-                  <Button className="w-full" disabled={!reqDetails.trim()} data-testid="button-send-request"
+                  <Button className="w-full" disabled={!reqDetails.trim() || submitRequestMutation.isPending} data-testid="button-send-request"
                     onClick={() => submitRequestMutation.mutate({ requestType: reqType, details: { message: reqDetails }, status: 'pending' })}>
                     Send Request
                   </Button>
                 </div>
-              </DialogContent>
-            </Dialog>
+              </MotionDialog>
+            </>
           )}
         </div>
       </div>
@@ -158,12 +167,12 @@ export default function ShiftsPage() {
                 {rows.length > 0 ? `Week of ${rows[0]?.weekStart || 'N/A'}` : 'No shifts'}
               </h2>
               <div className="flex gap-2">
-                {publishedCount > 0 && <Badge className="bg-green-500/20 text-green-400">{publishedCount} Published</Badge>}
-                {canManage && draftCount > 0 && <Badge className="bg-yellow-500/20 text-yellow-400">{draftCount} Draft</Badge>}
+                {publishedCount > 0 && <PulseOnChange value={publishedCount}><Badge className="bg-green-500/20 text-green-400">{publishedCount} Published</Badge></PulseOnChange>}
+                {canManage && draftCount > 0 && <PulseOnChange value={draftCount}><Badge className="bg-yellow-500/20 text-yellow-400">{draftCount} Draft</Badge></PulseOnChange>}
               </div>
             </div>
             {canManage && draftCount > 0 && (
-              <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={publishAll} data-testid="button-publish-shifts">
+              <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700 text-white" disabled={publishMutation.isPending} onClick={publishAll} data-testid="button-publish-shifts">
                 <CheckCircle2 className="mr-2 h-4 w-4" /> Publish All Drafts
               </Button>
             )}
@@ -223,7 +232,15 @@ export default function ShiftsPage() {
                     );
                   })}
                   {rows.length === 0 && (
-                    <div className="p-8 text-center text-muted-foreground col-span-8">No shifts scheduled yet</div>
+                    <div className="col-span-8">
+                      <Empty>
+                        <EmptyContent>
+                          <EmptyMedia variant="icon"><CalendarDays className="h-10 w-10" /></EmptyMedia>
+                          <EmptyTitle>No shifts scheduled yet</EmptyTitle>
+                          <EmptyDescription>Create shifts to build your team&apos;s schedule.</EmptyDescription>
+                        </EmptyContent>
+                      </Empty>
+                    </div>
                   )}
                 </div>
               </div>
@@ -250,9 +267,9 @@ export default function ShiftsPage() {
                       </div>
                       {canManage && req.status === 'pending' && (
                         <div className="flex gap-1">
-                          <Button size="sm" variant="outline" className="h-7 text-xs text-green-400" data-testid={`button-approve-${req.id}`}
+                          <Button size="sm" variant="outline" className="h-7 text-xs text-green-400" disabled={reviewRequestMutation.isPending} data-testid={`button-approve-${req.id}`}
                             onClick={() => reviewRequestMutation.mutate({ id: req.id, status: 'approved' })}>Approve</Button>
-                          <Button size="sm" variant="outline" className="h-7 text-xs text-red-400" data-testid={`button-deny-${req.id}`}
+                          <Button size="sm" variant="outline" className="h-7 text-xs text-red-400" disabled={reviewRequestMutation.isPending} data-testid={`button-deny-${req.id}`}
                             onClick={() => reviewRequestMutation.mutate({ id: req.id, status: 'denied', note: 'Denied by supervisor' })}>Deny</Button>
                         </div>
                       )}

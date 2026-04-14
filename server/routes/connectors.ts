@@ -52,7 +52,7 @@ export function registerConnectorRoutes(app: Express) {
       const data = connectorPatchSchema.parse(req.body);
       const c = await storage.updateIntegrationConnector(Number(req.params.id), data);
       if (!c) return res.status(404).json({ message: "Not found" });
-      res.json(c);
+      res.json({ ...c, config: redactConnectorConfig(c.config) });
     } catch (e) { next(e); }
   });
 
@@ -81,7 +81,7 @@ export function registerConnectorRoutes(app: Express) {
   });
 
   // SYNC JOBS
-  app.get("/api/sync-jobs", requireAuth, async (req, res, next) => {
+  app.get("/api/sync-jobs", requireAuth, requireCapability("connector_manage"), async (req, res, next) => {
     try {
       const connectorId = req.query.connectorId ? Number(req.query.connectorId) : undefined;
       const limit = Math.min(Number(req.query.limit) || 50, 200);
@@ -89,7 +89,7 @@ export function registerConnectorRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.get("/api/sync-jobs/:id", requireAuth, async (req, res, next) => {
+  app.get("/api/sync-jobs/:id", requireAuth, requireCapability("connector_manage"), async (req, res, next) => {
     try {
       const j = await storage.getSyncJob(Number(req.params.id));
       if (!j) return res.status(404).json({ message: "Not found" });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { requireAuth, requireRole } from "../../server/auth.js";
+import { readFileSync } from "fs";
 
 // ─── Password hashing ──────────────────────────────────────────────────────────
 // We test the scrypt-based hash/compare functions via the exported hashPassword
@@ -125,5 +126,19 @@ describe("requireRole middleware", () => {
     expect(next).not.toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({ message: "Insufficient permissions" });
+  });
+});
+
+describe("user_sessions migration", () => {
+  it("creates the explicit session store table and expiry index", () => {
+    const sql = readFileSync(
+      "supabase/migrations/20260414000000_023_user_sessions.sql",
+      "utf8",
+    );
+
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS public.user_sessions");
+    expect(sql).toContain("sess json NOT NULL");
+    expect(sql).toContain("expire timestamp(6) NOT NULL");
+    expect(sql).toContain("CREATE INDEX IF NOT EXISTS user_sessions_expire_idx");
   });
 });

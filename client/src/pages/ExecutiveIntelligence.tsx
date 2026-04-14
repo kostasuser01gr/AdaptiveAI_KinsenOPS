@@ -1,11 +1,13 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart3, TrendingUp, TrendingDown, Activity, AlertTriangle, Users, Car, Droplets, ArrowRight, Download, Star, Zap } from 'lucide-react';
+import { CountUp, PulseOnChange } from '@/components/motion';
 import { useEntitlements } from "@/lib/useEntitlements";
 import { LockedFeature } from "@/components/LockedFeature";
 
@@ -21,10 +23,12 @@ function InsightCard({ title, value, change, changeLabel, icon: Icon, color, act
             </div>
             <div>
               <p className="text-xs text-muted-foreground">{title}</p>
-              <p className="text-xl font-bold">{value}</p>
+              <p className="text-xl font-bold">
+                {typeof value === 'number' ? <CountUp value={value} /> : value}
+              </p>
             </div>
           </div>
-          {confidence && <Badge variant="outline" className="text-[9px]">{confidence}%</Badge>}
+          {confidence && <PulseOnChange value={confidence}><Badge variant="outline" className="text-[9px]">{confidence}%</Badge></PulseOnChange>}
         </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1 text-xs">
@@ -47,12 +51,11 @@ export default function ExecutiveIntelligencePage() {
   const { data: summaryData } = useQuery({ queryKey: ["/api/analytics/summary"] });
   const { data: kpiData } = useQuery<{ kpis: Record<string, { value: number; unit: string }> }>({
     queryKey: ["/api/kpi/compute"],
-    queryFn: () => fetch('/api/kpi/compute', { credentials: 'include' }).then(r => r.json()),
     enabled: hasFeature("kpi_snapshots"),
   });
   const { data: anomaliesData } = useQuery({ queryKey: ["/api/anomalies"], enabled: hasFeature("anomaly_detection") });
   const { data: briefingsData } = useQuery({ queryKey: ["/api/executive-briefings"], enabled: briefingsEnabled });
-  const { data: trendsData } = useQuery<{ date: string; washes: number; evidence: number; notifications: number }[]>({ queryKey: ["/api/analytics/trends", 30], queryFn: () => fetch("/api/analytics/trends?days=30", { credentials: 'include' }).then(r => r.json()) });
+  const { data: trendsData } = useQuery<{ date: string; washes: number; evidence: number; notifications: number }[]>({ queryKey: ["/api/analytics/trends", 30], queryFn: () => apiRequest("GET", "/api/analytics/trends?days=30").then(r => r.json()) });
 
   const vehicles = Array.isArray(vehiclesData) ? vehiclesData : [];
   const washes = Array.isArray(washData) ? washData : [];
@@ -83,7 +86,7 @@ export default function ExecutiveIntelligencePage() {
   const avgFirst = firstHalf.length > 0 ? firstHalf.reduce((s, t) => s + t.washes, 0) / firstHalf.length : 0;
   const avgSecond = secondHalf.length > 0 ? secondHalf.reduce((s, t) => s + t.washes, 0) / secondHalf.length : 0;
   const washTrendPct = avgFirst > 0 ? Math.round(((avgSecond - avgFirst) / avgFirst) * 100) : 0;
-  const peakDay = trends.reduce((best, t) => t.washes > (best?.washes ?? 0) ? t : best, trends[0]);
+  const peakDay = trends.length > 0 ? trends.reduce((best, t) => t.washes > (best?.washes ?? 0) ? t : best, trends[0]) : null;
   const avgDailyWashes = trends.length > 0 ? Math.round(trends.reduce((s, t) => s + t.washes, 0) / trends.length * 10) / 10 : 0;
   const avgDailyNotifs = trends.length > 0 ? Math.round(trends.reduce((s, t) => s + t.notifications, 0) / trends.length * 10) / 10 : 0;
 

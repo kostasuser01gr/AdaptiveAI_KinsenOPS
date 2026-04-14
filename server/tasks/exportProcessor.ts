@@ -8,7 +8,7 @@ import { storage } from "../storage.js";
 import { logger } from "../observability/logger.js";
 import type { TaskDefinition } from "./types.js";
 import { generateExport } from "../exports/generators.js";
-import { EXPORT_EXPIRY_HOURS, type ExportType, type ExportFormat } from "../exports/policy.js";
+import { getExportExpiryHours, type ExportType, type ExportFormat } from "../exports/policy.js";
 
 export const exportProcessorTask: TaskDefinition = {
   id: "export-processor",
@@ -36,8 +36,9 @@ export const exportProcessorTask: TaskDefinition = {
           (row.filters as Record<string, unknown>) || undefined,
         );
 
+        const expiryHours = await getExportExpiryHours();
         const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + EXPORT_EXPIRY_HOURS);
+        expiresAt.setHours(expiresAt.getHours() + expiryHours);
 
         await storage.updateExportRequest(row.id, {
           status: "completed",

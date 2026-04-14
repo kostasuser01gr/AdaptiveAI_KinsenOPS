@@ -38,6 +38,11 @@ export class NotificationStorage {
     return n;
   }
 
+  async getNotification(id: number) {
+    const [n] = await db.select().from(notifications).where(and(eq(notifications.id, id), wsFilter(notifications))).limit(1);
+    return n ?? null;
+  }
+
   async markNotificationRead(notificationId: number, userId: number) {
     await db.insert(notificationReads)
       .values({ notificationId, userId })

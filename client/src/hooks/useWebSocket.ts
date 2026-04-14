@@ -103,7 +103,7 @@ function connect() {
 
   socket.onmessage = (event) => {
     try {
-      handleServerMessage(JSON.parse(event.data) as WSMessage);
+      handleServerMessagePatched(JSON.parse(event.data) as WSMessage);
     } catch { /* ignore non-JSON frames */ }
   };
 
@@ -127,6 +127,7 @@ function handleServerMessage(msg: WSMessage) {
       queryClient.invalidateQueries({ queryKey: ['/api/wash-queue'] });
       break;
     case 'notification':
+    case 'notification:created':
     case 'notifications_changed':
       queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
       break;
@@ -166,6 +167,16 @@ function handleServerMessage(msg: WSMessage) {
   }
 }
 
+// Per-hook message listeners so each hook instance gets its own lastMessage
+const messageListeners = new Set<(msg: WSMessage) => void>();
+
+// Patch handleServerMessage to also notify per-hook listeners
+const _origHandleServerMessage = handleServerMessage;
+function handleServerMessagePatched(msg: WSMessage) {
+  _origHandleServerMessage(msg);
+  for (const fn of messageListeners) fn(msg);
+}
+
 // ─── Hook: thin wrapper over the singleton ───────────────────────────────────
 // Each caller declares which channels it needs. Ref-counting ensures the
 // connection stays open while at least one consumer exists, and channel
@@ -173,6 +184,7 @@ function handleServerMessage(msg: WSMessage) {
 
 export function useWebSocket(channels: string[] = []) {
   const [status, setStatus] = useState<WSStatus>(wsStatus);
+  const [lastMessage, setLastMessage] = useState<WSMessage | null>(null);
   const prevChannels = useRef<string[]>([]);
 
   // Register this hook instance as a consumer
@@ -184,11 +196,14 @@ export function useWebSocket(channels: string[] = []) {
     }
     // Listen for status changes
     statusListeners.add(setStatus);
+    // Listen for messages
+    messageListeners.add(setLastMessage);
     // Sync current status immediately
     setStatus(wsStatus);
 
     return () => {
       statusListeners.delete(setStatus);
+      messageListeners.delete(setLastMessage);
       consumerCount--;
       if (consumerCount <= 0) {
         cleanupConnection();
@@ -220,5 +235,5 @@ export function useWebSocket(channels: string[] = []) {
 
   const send = useCallback((msg: Record<string, unknown>) => sendRaw(msg), []);
 
-  return { status, send };
+  return { status, send, lastMessage };
 }

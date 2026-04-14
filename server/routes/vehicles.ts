@@ -33,7 +33,7 @@ export function registerVehicleRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.patch("/api/vehicles/:id", requireAuth, async (req, res, next) => {
+  app.patch("/api/vehicles/:id", requireRole("admin", "supervisor", "agent"), async (req, res, next) => {
     try {
       const v = await storage.updateVehicle(Number(req.params.id), vehiclePatchSchema.parse(req.body));
       if (!v) return res.status(404).json({ message: "Not found" });

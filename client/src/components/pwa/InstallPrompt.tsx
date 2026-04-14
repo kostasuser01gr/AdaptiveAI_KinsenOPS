@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, createContext, useContext } from 'react';
 import { Button } from "@/components/ui/button";
 import { Download, X } from 'lucide-react';
 
@@ -9,36 +9,72 @@ interface BeforeInstallPromptEvent extends Event {
 
 let deferredPrompt: BeforeInstallPromptEvent | null = null;
 
-export function InstallPrompt() {
-  const [showBanner, setShowBanner] = useState(false);
+interface PWAContextType {
+  canInstall: boolean;
+  isInstalled: boolean;
+  triggerInstall: () => Promise<void>;
+}
+
+const PWAContext = createContext<PWAContextType>({ canInstall: false, isInstalled: false, triggerInstall: async () => {} });
+
+export function usePWA() {
+  return useContext(PWAContext);
+}
+
+export function PWAProvider({ children }: { children: React.ReactNode }) {
+  const [canInstall, setCanInstall] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
       e.preventDefault();
       deferredPrompt = e as BeforeInstallPromptEvent;
-      // Don't show if already dismissed this session
-      if (sessionStorage.getItem('pwa-install-dismissed')) return;
-      setShowBanner(true);
+      setCanInstall(true);
     };
-
     window.addEventListener('beforeinstallprompt', handler);
 
-    // If already installed, never show
     if (window.matchMedia('(display-mode: standalone)').matches) {
-      setShowBanner(false);
+      setIsInstalled(true);
     }
+
+    window.addEventListener('appinstalled', () => {
+      setIsInstalled(true);
+      setCanInstall(false);
+    });
 
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  const handleInstall = async () => {
+  const triggerInstall = useCallback(async () => {
     if (!deferredPrompt) return;
     await deferredPrompt.prompt();
     const result = await deferredPrompt.userChoice;
     if (result.outcome === 'accepted') {
-      setShowBanner(false);
+      setCanInstall(false);
     }
     deferredPrompt = null;
+  }, []);
+
+  return (
+    <PWAContext.Provider value={{ canInstall, isInstalled, triggerInstall }}>
+      {children}
+    </PWAContext.Provider>
+  );
+}
+
+export function InstallPrompt() {
+  const { canInstall, triggerInstall } = usePWA();
+  const [showBanner, setShowBanner] = useState(false);
+
+  useEffect(() => {
+    if (canInstall && !sessionStorage.getItem('pwa-install-dismissed')) {
+      setShowBanner(true);
+    }
+  }, [canInstall]);
+
+  const handleInstall = async () => {
+    await triggerInstall();
+    setShowBanner(false);
   };
 
   const handleDismiss = () => {

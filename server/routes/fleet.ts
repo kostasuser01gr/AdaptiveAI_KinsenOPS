@@ -1,12 +1,13 @@
 import type { Express } from "express";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireRole } from "../auth.js";
 import { wsManager } from "../websocket.js";
 import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
 import { REPAIR_ORDER_TRANSITIONS } from "./_helpers.js";
 import { resolveStationScope } from "../middleware/stationScope.js";
 import { insertRepairOrderSchema, insertDowntimeEventSchema } from "../../shared/schema.js";
+import { withTransaction } from "../db.js";
 
 export function registerFleetRoutes(app: Express) {
   // REPAIR ORDERS
@@ -94,36 +95,41 @@ export function registerFleetRoutes(app: Express) {
 
       const updateData: Record<string, unknown> = { ...data };
 
-      // Mark completion timestamp
-      if (data.status === 'completed' && existing.status !== 'completed') {
-        updateData.completedAt = new Date();
-        // Close associated downtime
-        if (existing.vehicleId) {
+      // Wrap multi-table status changes in a transaction
+      const updated = await withTransaction(async () => {
+        // Mark completion timestamp
+        if (data.status === 'completed' && existing.status !== 'completed') {
+          updateData.completedAt = new Date();
+          // Close associated downtime
+          if (existing.vehicleId) {
+            const downtimeEvents = await storage.getDowntimeEvents({ vehicleId: existing.vehicleId });
+            const openDowntime = downtimeEvents.find(d => d.repairOrderId === id && !d.endedAt);
+            if (openDowntime) {
+              await storage.updateDowntimeEvent(openDowntime.id, { endedAt: new Date() });
+            }
+            // Restore vehicle to available
+            await storage.updateVehicle(existing.vehicleId, { status: 'available' });
+          }
+        } else if (data.status === 'cancelled' && existing.vehicleId) {
+          // Cancel associated downtime
           const downtimeEvents = await storage.getDowntimeEvents({ vehicleId: existing.vehicleId });
           const openDowntime = downtimeEvents.find(d => d.repairOrderId === id && !d.endedAt);
           if (openDowntime) {
             await storage.updateDowntimeEvent(openDowntime.id, { endedAt: new Date() });
           }
-          // Restore vehicle to available
           await storage.updateVehicle(existing.vehicleId, { status: 'available' });
         }
-      } else if (data.status === 'cancelled' && existing.vehicleId) {
-        // Cancel associated downtime
-        const downtimeEvents = await storage.getDowntimeEvents({ vehicleId: existing.vehicleId });
-        const openDowntime = downtimeEvents.find(d => d.repairOrderId === id && !d.endedAt);
-        if (openDowntime) {
-          await storage.updateDowntimeEvent(openDowntime.id, { endedAt: new Date() });
-        }
-        await storage.updateVehicle(existing.vehicleId, { status: 'available' });
-      }
 
-      const updated = await storage.updateRepairOrder(id, updateData);
-      if (!updated) return res.status(404).json({ message: "Not found" });
+        const result = await storage.updateRepairOrder(id, updateData);
+        if (!result) throw new Error("Not found");
 
-      await storage.createActivityEntry({
-        userId: user.id, actorName: user.displayName,
-        action: data.status ? `repair_order_${data.status}` : 'repair_order_updated',
-        entityType: 'repair_order', entityId: String(id), entityLabel: updated.title, stationId: updated.stationId,
+        await storage.createActivityEntry({
+          userId: user.id, actorName: user.displayName,
+          action: data.status ? `repair_order_${data.status}` : 'repair_order_updated',
+          entityType: 'repair_order', entityId: String(id), entityLabel: result.title, stationId: result.stationId,
+        });
+
+        return result;
       });
 
       wsManager.broadcast({ type: 'repair_order:updated', data: updated });
@@ -141,13 +147,13 @@ export function registerFleetRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.post("/api/downtime-events", requireAuth, async (req, res, next) => {
+  app.post("/api/downtime-events", requireRole("admin", "supervisor"), async (req, res, next) => {
     try {
       res.status(201).json(await storage.createDowntimeEvent(insertDowntimeEventSchema.parse(req.body)));
     } catch (e) { next(e); }
   });
 
-  app.patch("/api/downtime-events/:id", requireAuth, async (req, res, next) => {
+  app.patch("/api/downtime-events/:id", requireRole("admin", "supervisor"), async (req, res, next) => {
     try {
       const patchSchema = z.object({
         endedAt: z.coerce.date().nullable().optional(),

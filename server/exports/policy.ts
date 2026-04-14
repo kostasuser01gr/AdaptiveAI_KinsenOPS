@@ -34,11 +34,23 @@ const ROLE_REQUIREMENTS: Record<ExportType, readonly string[]> = {
   executive_summaries: ["admin"],
 };
 
-/** How many hours until a completed export file expires. */
+import { configResolver } from "../config/resolver.js";
+
+/** How many hours until a completed export file expires. (default — prefer configResolver at runtime) */
 export const EXPORT_EXPIRY_HOURS = 48;
 
-/** Maximum rows per single export to prevent resource exhaustion. */
+/** Maximum rows per single export to prevent resource exhaustion. (default — prefer configResolver at runtime) */
 export const MAX_EXPORT_ROWS = 50_000;
+
+/** Runtime-resolved export expiry hours. */
+export async function getExportExpiryHours(): Promise<number> {
+  return configResolver.getNumber("operational.export_expiry_hours");
+}
+
+/** Runtime-resolved max export rows. */
+export async function getMaxExportRows(): Promise<number> {
+  return configResolver.getNumber("operational.max_export_rows");
+}
 
 /**
  * Check if a given export type requires admin approval before processing.

@@ -100,7 +100,7 @@ export async function checkUsageCeiling(
     return { allowed: current < def.ceiling, current, ceiling: def.ceiling };
   } catch (err) {
     console.error("[metering] Failed to check usage ceiling:", err);
-    // Fail open — don't block the user if metering is broken
-    return { allowed: true, current: 0, ceiling: def.ceiling };
+    // Fail closed — deny usage when metering is unreachable to prevent limit bypass
+    return { allowed: false, current: 0, ceiling: def.ceiling };
   }
 }

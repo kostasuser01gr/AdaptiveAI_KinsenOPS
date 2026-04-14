@@ -33,6 +33,9 @@ import { ChannelStorage } from "./channels.js";
 import { AppGraphStorage } from "./appGraph.js";
 import { AiUsageStorage } from "./aiUsage.js";
 import { ExtensionStorage } from "./extensions.js";
+import { InviteTokenStorage } from "./inviteTokens.js";
+import { TabWidgetStorage } from "./tabWidgets.js";
+import { IdeaStorage } from "./ideas.js";
 
 // Instantiate each domain
 const userStorage = new UserStorage();
@@ -64,6 +67,9 @@ const channelStorage = new ChannelStorage();
 const appGraphStorage = new AppGraphStorage();
 const aiUsageStorage = new AiUsageStorage();
 const extensionStorage = new ExtensionStorage();
+const inviteTokenStorage = new InviteTokenStorage();
+const tabWidgetStorage = new TabWidgetStorage();
+const ideaStorage = new IdeaStorage();
 
 /**
  * Composed DatabaseStorage — delegates every call to the matching domain module.
@@ -78,6 +84,7 @@ class DatabaseStorage implements IStorage {
   getUsers = userStorage.getUsers.bind(userStorage);
   createUser = userStorage.createUser.bind(userStorage);
   updateUser = userStorage.updateUser.bind(userStorage);
+  updateUserUnscoped = userStorage.updateUserUnscoped.bind(userStorage);
   deleteUser = userStorage.deleteUser.bind(userStorage);
   getUserPreferences = userStorage.getUserPreferences.bind(userStorage);
   getUserPreference = userStorage.getUserPreference.bind(userStorage);
@@ -130,6 +137,7 @@ class DatabaseStorage implements IStorage {
 
   // Notifications
   getNotifications = notificationStorage.getNotifications.bind(notificationStorage);
+  getNotification = notificationStorage.getNotification.bind(notificationStorage);
   createNotification = notificationStorage.createNotification.bind(notificationStorage);
   updateNotification = notificationStorage.updateNotification.bind(notificationStorage);
   markNotificationRead = notificationStorage.markNotificationRead.bind(notificationStorage);
@@ -410,6 +418,45 @@ class DatabaseStorage implements IStorage {
   installExtension = extensionStorage.installExtension.bind(extensionStorage);
   updateExtension = extensionStorage.updateExtension.bind(extensionStorage);
   uninstallExtension = extensionStorage.uninstallExtension.bind(extensionStorage);
+
+  // Invite tokens
+  createInviteToken = inviteTokenStorage.createInviteToken.bind(inviteTokenStorage);
+  getInviteTokenByToken = inviteTokenStorage.getInviteTokenByToken.bind(inviteTokenStorage);
+  markInviteTokenUsed = inviteTokenStorage.markInviteTokenUsed.bind(inviteTokenStorage);
+  getInviteTokens = inviteTokenStorage.getInviteTokens.bind(inviteTokenStorage);
+  deleteInviteToken = inviteTokenStorage.deleteInviteToken.bind(inviteTokenStorage);
+
+  // User tabs (Phase 6)
+  getUserTabs = tabWidgetStorage.getUserTabs.bind(tabWidgetStorage);
+  getUserTab = tabWidgetStorage.getUserTab.bind(tabWidgetStorage);
+  createUserTab = tabWidgetStorage.createUserTab.bind(tabWidgetStorage);
+  updateUserTab = tabWidgetStorage.updateUserTab.bind(tabWidgetStorage);
+  deleteUserTab = tabWidgetStorage.deleteUserTab.bind(tabWidgetStorage);
+  reorderUserTabs = tabWidgetStorage.reorderUserTabs.bind(tabWidgetStorage);
+
+  // Widget definitions (Phase 6)
+  getWidgetDefinitions = tabWidgetStorage.getWidgetDefinitions.bind(tabWidgetStorage);
+  getWidgetDefinition = tabWidgetStorage.getWidgetDefinition.bind(tabWidgetStorage);
+  createWidgetDefinition = tabWidgetStorage.createWidgetDefinition.bind(tabWidgetStorage);
+  updateWidgetDefinition = tabWidgetStorage.updateWidgetDefinition.bind(tabWidgetStorage);
+
+  // Tab widgets (Phase 6)
+  getTabWidgets = tabWidgetStorage.getTabWidgets.bind(tabWidgetStorage);
+  createTabWidget = tabWidgetStorage.createTabWidget.bind(tabWidgetStorage);
+  updateTabWidget = tabWidgetStorage.updateTabWidget.bind(tabWidgetStorage);
+  deleteTabWidget = tabWidgetStorage.deleteTabWidget.bind(tabWidgetStorage);
+  bulkUpdateTabWidgetLayout = tabWidgetStorage.bulkUpdateTabWidgetLayout.bind(tabWidgetStorage);
+
+  // Idea comments (Phase 6)
+  getIdeaComments = ideaStorage.getIdeaComments.bind(ideaStorage);
+  createIdeaComment = ideaStorage.createIdeaComment.bind(ideaStorage);
+  updateIdeaComment = ideaStorage.updateIdeaComment.bind(ideaStorage);
+  deleteIdeaComment = ideaStorage.deleteIdeaComment.bind(ideaStorage);
+
+  // Idea attachments (Phase 6)
+  getIdeaAttachments = ideaStorage.getIdeaAttachments.bind(ideaStorage);
+  createIdeaAttachment = ideaStorage.createIdeaAttachment.bind(ideaStorage);
+  deleteIdeaAttachment = ideaStorage.deleteIdeaAttachment.bind(ideaStorage);
 }
 
 export const storage = new DatabaseStorage();

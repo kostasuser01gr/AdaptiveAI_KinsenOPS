@@ -64,6 +64,7 @@ export default function ShortcutsPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/custom-actions'] });
       toast({ title: "Shortcut Deleted" });
     },
+    onError: (err: Error) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const resetForm = () => {

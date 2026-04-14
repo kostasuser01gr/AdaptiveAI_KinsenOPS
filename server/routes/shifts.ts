@@ -73,7 +73,7 @@ export function registerShiftRoutes(app: Express) {
       const { status, note } = shiftRequestReviewSchema.parse(req.body);
       const reviewerId = (req.user as Express.User).id;
       const r = await storage.reviewShiftRequest(Number(req.params.id), reviewerId, status, note ?? undefined);
-      if (!r) return res.status(404).json({ message: "Not found" });
+      if (!r) return res.status(409).json({ message: "Request already reviewed or not found" });
       res.json(r);
     } catch (e) { next(e); }
   });

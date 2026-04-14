@@ -14,7 +14,7 @@ interface LogContext {
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 class StructuredLogger {
-  private isDevelopment = process.env.NODE_ENV !== 'production';
+  private isDevelopment = process.env.NODE_ENV !== 'production'; // Keep process.env — logger loads before config
 
   private formatMessage(level: LogLevel, message: string, context?: LogContext): string {
     const timestamp = new Date().toISOString();

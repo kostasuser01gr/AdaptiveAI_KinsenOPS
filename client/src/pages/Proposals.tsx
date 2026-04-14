@@ -69,7 +69,7 @@ export default function ProposalsPage() {
 
   const reviewMutation = useMutation({
     mutationFn: async ({ id, status, note }: { id: number; status: string; note?: string }) => {
-      const res = await apiRequest('PATCH', `/api/proposals/${id}/review`, { status, note });
+      const res = await apiRequest('PATCH', `/api/proposals/${id}/review`, { status, reviewNote: note });
       return res.json();
     },
     onSuccess: () => {

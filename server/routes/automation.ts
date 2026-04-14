@@ -1,12 +1,12 @@
 import type { Express } from "express";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireRole } from "../auth.js";
 import { aiChatLimiter } from "../middleware/rate-limiter.js";
 import { recordUsage, checkUsageCeiling } from "../metering/service.js";
 import { requireEntitlement } from "../entitlements/engine.js";
 import { requireCapability } from "../capabilities/engine.js";
-import { automationRulePatchSchema, executeAutomationRule } from "./_helpers.js";
+import { automationRulePatchSchema, automationConditionSchema, automationActionSchema, executeAutomationRule } from "./_helpers.js";
 import { insertAutomationRuleSchema } from "../../shared/schema.js";
 
 export function registerAutomationRoutes(app: Express) {
@@ -18,9 +18,12 @@ export function registerAutomationRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.post("/api/automation-rules", requireAuth, async (req, res, next) => {
+  app.post("/api/automation-rules", requireRole("admin", "supervisor"), async (req, res, next) => {
     try {
       const userId = (req.user as Express.User).id;
+      // Validate JSONB fields with strict schemas before persisting
+      if (req.body.conditions != null) automationConditionSchema.parse(req.body.conditions);
+      if (req.body.actions != null) z.array(automationActionSchema).max(20).parse(req.body.actions);
       res.status(201).json(await storage.createAutomationRule(insertAutomationRuleSchema.parse({ ...req.body, createdBy: userId })));
     } catch (e) { next(e); }
   });

@@ -38,7 +38,7 @@ export class ShiftStorage {
   }
   async reviewShiftRequest(id: number, reviewedBy: number, status: string, note?: string) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- reviewedAt/reviewNote absent from insert schema
-    const [req] = await db.update(shiftRequests).set({ status, reviewedBy, reviewNote: note || null, reviewedAt: new Date() } as any).where(and(eq(shiftRequests.id, id), wsFilter(shiftRequests))).returning();
+    const [req] = await db.update(shiftRequests).set({ status, reviewedBy, reviewNote: note || null, reviewedAt: new Date() } as any).where(and(eq(shiftRequests.id, id), eq(shiftRequests.status, 'pending'), wsFilter(shiftRequests))).returning();
     return req;
   }
 }

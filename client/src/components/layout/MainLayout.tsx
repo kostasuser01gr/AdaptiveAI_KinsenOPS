@@ -4,6 +4,7 @@ import { useApp } from '@/lib/AppContext';
 import { useAuth } from '@/lib/useAuth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { queryKeys } from '@/lib/queryKeys';
 import { useLocation } from 'wouter';
 import {
   Menu, Zap, Search as SearchIcon, Bell, Mic, Clock, FileText, Settings, WifiOff, X,
@@ -12,6 +13,7 @@ import {
   CheckCircle2, Info, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SlidePanel } from '@/components/motion/SlidePanel';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,7 +33,7 @@ const SEVERITY_ICON: Record<string, React.ReactNode> = {
 };
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const { sidebarOpen, setSidebarOpen, isMobile, t, isOffline, voiceMode, setVoiceMode, customActions } = useApp();
+  const { sidebarOpen, setSidebarOpen, sidebarCollapsed, isMobile, t, isOffline, voiceMode, setVoiceMode, customActions } = useApp();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
@@ -39,18 +41,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+  const sidebarMargin = sidebarOpen && !isMobile ? (sidebarCollapsed ? 'md:ml-[68px]' : 'md:ml-[280px]') : 'ml-0';
   const [recentActions, setRecentActions] = useState<string[]>(() => {
     try { return JSON.parse(localStorage.getItem('driveai_recent_actions') || '[]'); } catch { return []; }
   });
 
   const { data: notificationsData } = useQuery({
-    queryKey: ["/api/notifications"],
+    queryKey: queryKeys.notifications.all(),
     enabled: !!user,
-    refetchInterval: 15000,
   });
 
   const { data: moduleRegistryData } = useQuery<Array<{ id: number; slug: string; name: string; route: string; icon?: string; requiredRole?: string | null; enabled: boolean }>>({
-    queryKey: ["/api/module-registry"],
+    queryKey: queryKeys.moduleRegistry.all(),
     enabled: !!user,
   });
 
@@ -69,17 +76,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   };
 
   const { data: searchResults } = useQuery({
-    queryKey: ["/api/search", searchQuery],
+    queryKey: ["/api/search", debouncedSearch],
     queryFn: async () => {
-      if (!searchQuery.trim()) return [];
-      const res = await fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`);
+      if (!debouncedSearch.trim()) return [];
+      const res = await apiRequest("GET", `/api/search?q=${encodeURIComponent(debouncedSearch)}`);
       return res.json();
     },
-    enabled: !!searchQuery.trim() && cmdOpen,
+    enabled: !!debouncedSearch.trim() && cmdOpen,
   });
 
   const { data: activityData } = useQuery({
-    queryKey: ["/api/activity-feed"],
+    queryKey: queryKeys.activity.feed(),
     enabled: !!user && notifOpen,
   });
 
@@ -88,12 +95,12 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   const markReadMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/notifications/${id}/read`); },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() }),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/notifications/read-all"); },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() }),
   });
 
   const deleteActionMutation = useMutation({
@@ -131,6 +138,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <div className="flex h-[100dvh] w-full bg-background overflow-hidden relative">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:z-[100] focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">Skip to main content</a>
       <Sidebar />
       
       {isMobile && sidebarOpen && (
@@ -151,10 +159,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         </div>
       )}
 
-      {notifOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setNotifOpen(false)} />
-          <div className="fixed right-0 top-0 z-50 w-full sm:w-[380px] h-full bg-card border-l shadow-2xl flex flex-col" data-testid="notification-drawer">
+      <SlidePanel open={notifOpen} onClose={() => setNotifOpen(false)} side="right" className="w-full sm:w-[380px]">
+          <div data-testid="notification-drawer" className="flex flex-col h-full">
             <div className="flex items-center justify-between p-4 border-b">
               <div className="flex items-center gap-2">
                 <Bell className="h-5 w-5 text-primary" />
@@ -222,10 +228,9 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               </div>
             )}
           </div>
-        </>
-      )}
+        </SlidePanel>
 
-      <main className={`flex-1 flex flex-col min-w-0 h-full transition-all duration-300 ease-in-out relative ${sidebarOpen && !isMobile ? 'md:ml-[280px]' : 'ml-0'}`}>
+      <main id="main-content" className={`flex-1 flex flex-col min-w-0 h-full transition-all duration-300 ease-in-out relative ${sidebarMargin}`}>
         {isOffline && (
           <div className="bg-destructive text-destructive-foreground px-4 py-1.5 text-xs font-medium flex items-center justify-center gap-2">
             <WifiOff className="h-3.5 w-3.5" /> You are offline. Working from local cache.
@@ -235,7 +240,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         <header className="sticky top-0 z-20 flex items-center justify-between px-4 h-14 bg-background/80 backdrop-blur-md border-b">
           <div className="flex items-center gap-2 flex-1">
             {(!sidebarOpen || isMobile) && (
-              <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)} className="h-9 w-9 text-muted-foreground hover:text-foreground mr-1">
+              <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(true)} className="h-9 w-9 text-muted-foreground hover:text-foreground mr-1" aria-label="Open sidebar">
                 <Menu className="h-5 w-5" />
               </Button>
             )}
@@ -276,7 +281,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={toggleVoice}>
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full" onClick={toggleVoice} aria-label="Toggle voice mode">
                   <Mic className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </TooltipTrigger>
@@ -285,7 +290,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full relative" onClick={() => setNotifOpen(true)} data-testid="button-notifications">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-full relative" onClick={() => setNotifOpen(true)} data-testid="button-notifications" aria-label={`Notifications (${unreadCount} unread)`}>
                   <Bell className="h-4 w-4 text-muted-foreground" />
                   {unreadCount > 0 && (
                     <span className="absolute top-1 right-1 flex h-2 w-2 items-center justify-center rounded-full bg-destructive" />

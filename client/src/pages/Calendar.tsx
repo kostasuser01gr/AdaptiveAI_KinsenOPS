@@ -3,16 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Car, Users, Droplets, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarDays, Car, Users, Droplets, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const _HOURS = Array.from({ length: 14 }, (_, i) => i + 6);
 
 export default function CalendarPage() {
-  const { data: shiftsData } = useQuery({ queryKey: ["/api/shifts"] });
-  const { data: washData } = useQuery({ queryKey: ["/api/wash-queue"] });
-  const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
-  const { data: reservationsData } = useQuery({ queryKey: ["/api/reservations"] });
+  const { data: shiftsData, isLoading: loadingShifts } = useQuery({ queryKey: ["/api/shifts"] });
+  const { data: washData, isLoading: loadingWash } = useQuery({ queryKey: ["/api/wash-queue"] });
+  const { data: vehiclesData, isLoading: loadingVehicles } = useQuery({ queryKey: ["/api/vehicles"] });
+  const { data: reservationsData, isLoading: loadingRes } = useQuery({ queryKey: ["/api/reservations"] });
+  const isLoading = loadingShifts || loadingWash || loadingVehicles || loadingRes;
 
   const shifts = Array.isArray(shiftsData) ? shiftsData : [];
   const washes = Array.isArray(washData) ? washData : [];
@@ -24,11 +25,11 @@ export default function CalendarPage() {
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay() + 1 + weekOffset * 7);
 
-  const weekDates = DAYS.map((_, i) => {
+  const weekDates = React.useMemo(() => DAYS.map((_, i) => {
     const d = new Date(startOfWeek);
     d.setDate(startOfWeek.getDate() + i);
     return d;
-  });
+  }), [weekOffset]);
 
   const shiftColors: Record<string, string> = {
     Manager: 'bg-purple-500/20 border-purple-500/40 text-purple-300',
@@ -38,7 +39,11 @@ export default function CalendarPage() {
 
   const parseShiftHours = (s: string) => {
     if (!s || s === 'OFF') return null;
-    const [start, end] = s.split('-').map(Number);
+    const parts = s.split('-');
+    if (parts.length !== 2) return null;
+    const start = Number(parts[0]);
+    const end = Number(parts[1]);
+    if (Number.isNaN(start) || Number.isNaN(end)) return null;
     return { start, end };
   };
 
@@ -64,6 +69,14 @@ export default function CalendarPage() {
     }
     return events;
   }, [reservationsList, vehicles, weekDates]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-background">

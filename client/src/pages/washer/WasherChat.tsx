@@ -20,7 +20,8 @@ async function publicFetch(method: string, url: string, body?: unknown) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
+  const json = await res.json();
+  return (json && typeof json === 'object' && 'ok' in json) ? json.data : json;
 }
 
 export default function WasherChat() {

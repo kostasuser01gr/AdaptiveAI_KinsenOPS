@@ -37,6 +37,11 @@ export class UserStorage {
     const [user] = await db.update(users).set(data).where(and(eq(users.id, id), wsFilter(users))).returning();
     return user;
   }
+  /** Unscoped update — used for lockout counter updates during auth (before workspace context). */
+  async updateUserUnscoped(id: number, data: Partial<InsertUser>) {
+    const [user] = await db.update(users).set(data).where(eq(users.id, id)).returning();
+    return user;
+  }
   async deleteUser(id: number) {
     await db.delete(users).where(and(eq(users.id, id), wsFilter(users)));
   }

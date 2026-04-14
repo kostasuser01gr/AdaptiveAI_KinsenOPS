@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { WifiOff, RefreshCw } from 'lucide-react';
-import { useApp } from '@/lib/AppContext';
+import { useUI } from '@/lib/AppContext';
 
 export function ConnectionBanner() {
-  const { isOffline } = useApp();
+  const { isOffline } = useUI();
   const [swUpdateAvailable, setSwUpdateAvailable] = useState(false);
 
   useEffect(() => {

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Camera, Image as ImageIcon, UploadCloud, CheckCircle2, AlertTriangle, Shield, ChevronRight, Lock, Eye, Trash2, Loader2 } from 'lucide-react';
+import { SuccessCheck } from '@/components/motion';
 
 const DAMAGE_ZONES = ['Front Left', 'Front Center', 'Front Right', 'Left Side', 'Right Side', 'Rear Left', 'Rear Center', 'Rear Right', 'Roof', 'Interior'];
 
@@ -42,7 +43,8 @@ export default function CustomerUpload() {
           }),
         });
         if (!res.ok) throw new Error(`Upload failed for ${photo.zone}`);
-        const record = await res.json();
+        const json = await res.json();
+        const record = (json && typeof json === 'object' && 'ok' in json) ? json.data : json;
         results.push(record.id);
       }
       return results;
@@ -72,9 +74,7 @@ export default function CustomerUpload() {
   if (submitted) {
     return (
       <div className="flex flex-col h-full items-center justify-center p-6 text-center bg-background">
-        <div className="h-20 w-20 rounded-full bg-green-500/20 flex items-center justify-center mb-6">
-          <CheckCircle2 className="h-10 w-10 text-green-400" />
-        </div>
+        <SuccessCheck show className="mb-6 h-20 w-20" />
         <h2 className="text-2xl font-bold mb-2">Evidence Submitted Successfully</h2>
         <p className="text-muted-foreground mb-6 max-w-sm">
           Your {photos.length} photos have been securely uploaded and encrypted. Keep your reference code for your records.

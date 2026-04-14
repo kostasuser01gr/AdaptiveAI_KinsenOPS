@@ -1,23 +1,39 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod/v4';
 import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Droplets, CheckCircle2, QrCode, MonitorSmartphone, Loader2, Plus } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { MotionDialog } from "@/components/motion";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { insertWashQueueSchema } from "@shared/schema";
 import type { WashQueueItem } from "@shared/schema";
+
+const addWashSchema = insertWashQueueSchema.pick({
+  vehiclePlate: true,
+  washType: true,
+  priority: true,
+}).extend({
+  vehiclePlate: z.string().min(1, "Vehicle plate is required"),
+});
+type AddWashValues = z.infer<typeof addWashSchema>;
 
 export default function WashersPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = React.useState(false);
-  const [newItem, setNewItem] = React.useState({ vehiclePlate: '', washType: 'Quick Wash', priority: 'Normal' });
+  const washForm = useForm<AddWashValues>({
+    resolver: zodResolver(addWashSchema),
+    defaultValues: { vehiclePlate: '', washType: 'Quick Wash', priority: 'Normal' },
+  });
 
   const { data: queue, isLoading } = useQuery<WashQueueItem[]>({
     queryKey: ["/api/wash-queue"],
@@ -32,8 +48,9 @@ export default function WashersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/wash-queue"] });
       toast({ title: "Added to queue" });
       setDialogOpen(false);
-      setNewItem({ vehiclePlate: '', washType: 'Quick Wash', priority: 'Normal' });
+      washForm.reset();
     },
+    onError: (err: Error) => toast({ title: "Failed to add to queue", description: err.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -45,6 +62,7 @@ export default function WashersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/wash-queue"] });
       toast({ title: "Queue updated" });
     },
+    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
   const items = Array.isArray(queue) ? queue : [];
@@ -62,45 +80,43 @@ export default function WashersPage() {
           <Button variant="outline" className="gap-2" onClick={() => window.open('/washer', '_blank')}>
             <MonitorSmartphone className="h-4 w-4" /> Launch Kiosk
           </Button>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" data-testid="button-add-wash"><Plus className="h-4 w-4" /> Add to Queue</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add to Wash Queue</DialogTitle></DialogHeader>
-              <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(newItem); }} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Vehicle Plate</Label>
-                  <Input value={newItem.vehiclePlate} onChange={e => setNewItem({...newItem, vehiclePlate: e.target.value})} required data-testid="input-wash-plate" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Wash Type</Label>
-                  <Select value={newItem.washType} onValueChange={v => setNewItem({...newItem, washType: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Quick Wash">Quick Wash</SelectItem>
-                      <SelectItem value="Full Detail">Full Detail</SelectItem>
-                      <SelectItem value="Interior Only">Interior Only</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Priority</Label>
-                  <Select value={newItem.priority} onValueChange={v => setNewItem({...newItem, priority: v})}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Normal">Normal</SelectItem>
-                      <SelectItem value="Urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+          <Button className="gap-2" onClick={() => setDialogOpen(true)} data-testid="button-add-wash"><Plus className="h-4 w-4" /> Add to Queue</Button>
+          <MotionDialog open={dialogOpen} onOpenChange={setDialogOpen} title="Add to Wash Queue">
+              <Form {...washForm}>
+              <form onSubmit={washForm.handleSubmit((values) => createMutation.mutate(values))} className="space-y-4">
+                <FormField control={washForm.control} name="vehiclePlate" render={({ field }) => (
+                  <FormItem><FormLabel>Vehicle Plate</FormLabel><FormControl><Input {...field} data-testid="input-wash-plate" /></FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={washForm.control} name="washType" render={({ field }) => (
+                  <FormItem><FormLabel>Wash Type</FormLabel><FormControl>
+                    <Select value={field.value ?? undefined} onValueChange={field.onChange}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Quick Wash">Quick Wash</SelectItem>
+                        <SelectItem value="Full Detail">Full Detail</SelectItem>
+                        <SelectItem value="Interior Only">Interior Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormControl><FormMessage /></FormItem>
+                )} />
+                <FormField control={washForm.control} name="priority" render={({ field }) => (
+                  <FormItem><FormLabel>Priority</FormLabel><FormControl>
+                    <Select value={field.value ?? undefined} onValueChange={field.onChange}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Normal">Normal</SelectItem>
+                        <SelectItem value="Urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormControl><FormMessage /></FormItem>
+                )} />
                 <Button type="submit" disabled={createMutation.isPending} className="w-full" data-testid="button-submit-wash">
                   {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                   Add to Queue
                 </Button>
               </form>
-            </DialogContent>
-          </Dialog>
+              </Form>
+          </MotionDialog>
         </div>
       </div>
 
@@ -134,11 +150,12 @@ export default function WashersPage() {
                           {item.priority === 'Urgent' && <span className="text-xs text-destructive font-medium">{item.slaInfo}</span>}
                           <span className="text-sm font-medium">{item.assignedTo || 'Unassigned'}</span>
                           {!item.assignedTo ? (
-                            <Button size="sm" onClick={() => updateMutation.mutate({ id: item.id, data: { assignedTo: 'Staff', status: 'in_progress' } })} data-testid={`button-assign-${item.id}`}>
+                            <Button size="sm" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate({ id: item.id, data: { assignedTo: 'Staff', status: 'in_progress' } })} data-testid={`button-assign-${item.id}`}>
                               Assign
                             </Button>
                           ) : (
                             <Button size="sm" variant="outline" className="text-green-500 border-green-500/30 hover:bg-green-500/10"
+                              disabled={updateMutation.isPending}
                               onClick={() => updateMutation.mutate({ id: item.id, data: { status: 'completed' } })} data-testid={`button-complete-${item.id}`}>
                               <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
                             </Button>

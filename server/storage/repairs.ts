@@ -1,4 +1,4 @@
-import { db, eq, desc, and, isNull , wsFilter, wsInsert} from "./base.js";
+import { db, eq, desc, and, isNull , wsFilter, wsInsert, inArray} from "./base.js";
 import {
   repairOrders, type RepairOrder, type InsertRepairOrder,
   downtimeEvents, type DowntimeEvent, type InsertDowntimeEvent,
@@ -6,12 +6,13 @@ import {
 
 export class RepairStorage {
   // ── Repair orders ──
-  async getRepairOrders(filters?: { vehicleId?: number; incidentId?: number; status?: string; stationId?: number }) {
+  async getRepairOrders(filters?: { vehicleId?: number; incidentId?: number; status?: string; stationId?: number; stationIds?: number[] }) {
     const conditions = [];
     if (filters?.vehicleId) conditions.push(eq(repairOrders.vehicleId, filters.vehicleId));
     if (filters?.incidentId) conditions.push(eq(repairOrders.incidentId, filters.incidentId));
     if (filters?.status) conditions.push(eq(repairOrders.status, filters.status));
-    if (filters?.stationId) conditions.push(eq(repairOrders.stationId, filters.stationId));
+    if (filters?.stationIds?.length) conditions.push(inArray(repairOrders.stationId, filters.stationIds));
+    else if (filters?.stationId) conditions.push(eq(repairOrders.stationId, filters.stationId));
     if (conditions.length === 0) return db.select().from(repairOrders).where(wsFilter(repairOrders)).orderBy(desc(repairOrders.createdAt));
     if (conditions.length === 1) return db.select().from(repairOrders).where(and(conditions[0], wsFilter(repairOrders))).orderBy(desc(repairOrders.createdAt));
     return db.select().from(repairOrders).where(and(...conditions, wsFilter(repairOrders))).orderBy(desc(repairOrders.createdAt));

@@ -46,12 +46,14 @@ export default function ImportsPage() {
   const createImportMutation = useMutation({
     mutationFn: async (file: File) => {
       const ext = file.name.split('.').pop()?.toLowerCase() || 'csv';
+      const fileContent = await file.text();
       const res = await apiRequest('POST', '/api/imports', {
         filename: file.name,
         status: 'uploading',
         fileType: ext,
         records: 0,
         columns: 0,
+        rawContent: fileContent,
       });
       return res.json();
     },
@@ -62,7 +64,9 @@ export default function ImportsPage() {
       try {
         await apiRequest('POST', `/api/imports/${data.id}/process`);
         queryClient.invalidateQueries({ queryKey: ['/api/imports'] });
-      } catch {/* no-op */}
+      } catch (_err) {
+        toast({ title: "Processing Failed", description: "Import was created but processing failed. You can retry from the import detail view.", variant: "destructive" });
+      }
     },
     onError: () => toast({ title: "Upload Failed", description: "Could not create import job.", variant: "destructive" }),
   });
@@ -118,11 +122,17 @@ export default function ImportsPage() {
     setDragOver(false);
   }, []);
 
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) {
+      if (file.size > MAX_FILE_SIZE) {
+        toast({ title: "File too large", description: "Maximum file size is 50 MB.", variant: "destructive" });
+        return;
+      }
       setUploading(true);
       createImportMutation.mutate(file, { onSettled: () => setUploading(false) });
     }
@@ -131,6 +141,11 @@ export default function ImportsPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > MAX_FILE_SIZE) {
+        toast({ title: "File too large", description: "Maximum file size is 50 MB.", variant: "destructive" });
+        if (e.target) e.target.value = '';
+        return;
+      }
       setUploading(true);
       createImportMutation.mutate(file, { onSettled: () => setUploading(false) });
     }

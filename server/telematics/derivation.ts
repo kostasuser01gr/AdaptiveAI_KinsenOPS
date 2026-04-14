@@ -31,22 +31,48 @@ import { logger } from "../observability/logger.js";
 // Key: `${vehicleId}:${eventType}:${action}`, Value: timestamp of last action
 const cooldownMap = new Map<string, number>();
 
-/** Minimum interval between derivation actions of the same type for the same vehicle. */
-const COOLDOWN_MS: Record<string, number> = {
+/** Default cooldown intervals — overridden at runtime via configResolver. */
+const DEFAULT_COOLDOWN_MS: Record<string, number> = {
   notification: 5 * 60 * 1000,    // 5 minutes between notifications of same type
   incident: 30 * 60 * 1000,       // 30 minutes between auto-incidents
 };
+
+/** Resolved cooldown values — refreshed from config periodically. */
+let resolvedCooldowns: Record<string, number> | null = null;
+let cooldownsLoadedAt = 0;
+
+async function getCooldownMs(): Promise<Record<string, number>> {
+  if (resolvedCooldowns && Date.now() - cooldownsLoadedAt < 30_000) return resolvedCooldowns;
+  try {
+    const { configResolver } = await import("../config/resolver.js");
+    const [notification, incident, defaultCd] = await Promise.all([
+      configResolver.getNumber("channels.notification_cooldown_seconds"),
+      configResolver.getNumber("channels.incident_cooldown_seconds"),
+      configResolver.getNumber("channels.default_cooldown_seconds"),
+    ]);
+    resolvedCooldowns = {
+      notification: notification * 1000,
+      incident: incident * 1000,
+      default: defaultCd * 1000,
+    };
+    cooldownsLoadedAt = Date.now();
+  } catch {
+    resolvedCooldowns = DEFAULT_COOLDOWN_MS;
+  }
+  return resolvedCooldowns;
+}
 
 function cooldownKey(vehicleId: number, eventType: string, action: string): string {
   return `${vehicleId}:${eventType}:${action}`;
 }
 
 /** Returns true if action is within cooldown window. Updates timestamp if not. */
-function isCoolingDown(vehicleId: number, eventType: string, action: string): boolean {
+async function isCoolingDown(vehicleId: number, eventType: string, action: string): Promise<boolean> {
   const key = cooldownKey(vehicleId, eventType, action);
   const last = cooldownMap.get(key);
   const now = Date.now();
-  const window = COOLDOWN_MS[action] ?? 60_000;
+  const cooldowns = await getCooldownMs();
+  const window = cooldowns[action] ?? cooldowns.default ?? 60_000;
   if (last && now - last < window) return true;
   cooldownMap.set(key, now);
   return false;
@@ -142,7 +168,7 @@ async function handleMaintenanceAlert(event: VehicleEvent): Promise<{
   derivedEntityId: string;
 } | null> {
   // Cooldown: suppress repeated maintenance alerts for same vehicle
-  if (isCoolingDown(event.vehicleId, event.eventType, "notification")) {
+  if (await isCoolingDown(event.vehicleId, event.eventType, "notification")) {
     return { derivedAction: "notification_suppressed", derivedEntityType: "vehicle", derivedEntityId: String(event.vehicleId) };
   }
 
@@ -183,7 +209,7 @@ async function handleEngineAlert(event: VehicleEvent): Promise<{
   const description = payload?.message ?? payload?.description ?? payload?.code ?? "Engine alert";
 
   // Cooldown for notifications
-  if (isCoolingDown(event.vehicleId, event.eventType, "notification")) {
+  if (await isCoolingDown(event.vehicleId, event.eventType, "notification")) {
     return { derivedAction: "notification_suppressed", derivedEntityType: "vehicle", derivedEntityId: String(event.vehicleId) };
   }
 
@@ -206,7 +232,7 @@ async function handleEngineAlert(event: VehicleEvent): Promise<{
 
   // For critical engine alerts, auto-create an incident (with cooldown to prevent dupes)
   if (event.severity === "critical") {
-    if (isCoolingDown(event.vehicleId, event.eventType, "incident")) {
+    if (await isCoolingDown(event.vehicleId, event.eventType, "incident")) {
       // Already created a recent incident for this vehicle — skip
       return {
         derivedAction: "incident_suppressed",
@@ -261,7 +287,7 @@ async function handleBatteryUpdate(event: VehicleEvent): Promise<{
   }
 
   // Cooldown: suppress repeated low-battery notifications for same vehicle
-  if (isCoolingDown(event.vehicleId, event.eventType, "notification")) {
+  if (await isCoolingDown(event.vehicleId, event.eventType, "notification")) {
     return { derivedAction: "notification_suppressed", derivedEntityType: "vehicle", derivedEntityId: String(event.vehicleId) };
   }
 

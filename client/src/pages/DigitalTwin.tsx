@@ -6,30 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, AlertTriangle, Car, Users, Droplets, TrendingUp, Clock, MapPin, Shield, Zap, RefreshCw, History } from 'lucide-react';
-
-function MetricCard({ title, value, subtitle, icon: Icon, color = "text-primary", trend }: any) {
-  return (
-    <Card className="glass-panel" data-testid={`metric-${title.toLowerCase().replace(/\s/g,'-')}`}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium">{title}</p>
-            <p className={`text-2xl font-bold mt-1 ${color}`}>{value}</p>
-            {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
-          </div>
-          <div className={`h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center`}>
-            <Icon className={`h-5 w-5 ${color}`} />
-          </div>
-        </div>
-        {trend && <p className={`text-xs mt-2 ${trend.startsWith('+') || trend.startsWith('↑') ? 'text-red-400' : 'text-green-400'}`}>{trend}</p>}
-      </CardContent>
-    </Card>
-  );
-}
+import { PulseOnChange } from '@/components/motion';
+import { StatCard } from '@/components/StatCard';
 
 function RiskBadge({ level }: { level: string }) {
   const colors: Record<string, string> = { low: "bg-green-500/20 text-green-400", medium: "bg-yellow-500/20 text-yellow-400", high: "bg-red-500/20 text-red-400", critical: "bg-red-600/20 text-red-300" };
-  return <Badge className={`${colors[level] || colors.medium} font-medium`}>{level.toUpperCase()}</Badge>;
+  return <PulseOnChange value={level}><Badge className={`${colors[level] || colors.medium} font-medium`}>{level.toUpperCase()}</Badge></PulseOnChange>;
 }
 
 function StationCard({ station, data }: { station: string; data: any }) {
@@ -94,7 +76,6 @@ export default function DigitalTwinPage() {
   const { data: summaryData } = useQuery({ queryKey: ["/api/analytics/summary"], refetchInterval: autoRefresh ? 30000 : false });
   const { data: timelineData } = useQuery<any[]>({
     queryKey: ["/api/digital-twin/timeline"],
-    queryFn: () => fetch('/api/digital-twin/timeline', { credentials: 'include' }).then(r => r.json()),
     refetchInterval: autoRefresh ? 60000 : false,
   });
 
@@ -168,10 +149,10 @@ export default function DigitalTwinPage() {
 
             <TabsContent value="overview" className="space-y-6">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <MetricCard title="Total Fleet" value={totalVehicles} icon={Car} subtitle={`${readyCount} ready`} />
-                <MetricCard title="Washing Now" value={washingCount} icon={Droplets} color="text-blue-400" subtitle={`${pendingWashes} queued`} />
-                <MetricCard title="Staff Shifts" value={totalShifts} icon={Users} color="text-green-400" subtitle={`${allStations.length} station(s)`} />
-                <MetricCard title="Risk Level" value={riskLevel} icon={AlertTriangle} color={riskColor} subtitle={criticalNotifs > 0 ? `${criticalNotifs} critical alert(s)` : 'No critical alerts'} />
+                <StatCard title="Total Fleet" value={totalVehicles} icon={Car} subtitle={`${readyCount} ready`} />
+                <StatCard title="Washing Now" value={washingCount} icon={Droplets} color="text-blue-400" subtitle={`${pendingWashes} queued`} />
+                <StatCard title="Staff Shifts" value={totalShifts} icon={Users} color="text-green-400" subtitle={`${allStations.length} station(s)`} />
+                <StatCard title="Risk Level" value={riskLevel} icon={AlertTriangle} color={riskColor} subtitle={criticalNotifs > 0 ? `${criticalNotifs} critical alert(s)` : 'No critical alerts'} />
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

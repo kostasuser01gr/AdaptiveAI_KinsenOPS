@@ -3,6 +3,7 @@
  * Multi-station assignment management + backward-compatible scope resolution.
  */
 import { db, eq, and, wsFilter, wsInsert} from "./base.js";
+import { withTransaction } from "../db.js";
 import {
   userStationAssignments,
   users,
@@ -75,17 +76,19 @@ export class StationAssignmentStorage {
    * Replace all station assignments for a user with a new set.
    */
   async setUserStations(userId: number, stationIds: number[], assignedBy?: number): Promise<UserStationAssignment[]> {
-    // Remove all existing
-    await db.delete(userStationAssignments).where(and(eq(userStationAssignments.userId, userId), wsFilter(userStationAssignments)));
-    if (stationIds.length === 0) return [];
-    // Insert new — first is primary
-    const values = stationIds.map((stationId, i) => ({
-      userId,
-      stationId,
-      isPrimary: i === 0,
-      assignedBy,
-    }));
-    return db.insert(userStationAssignments).values(values.map(v => wsInsert(v))).returning();
+    return withTransaction(async (tx) => {
+      // Remove all existing
+      await tx.delete(userStationAssignments).where(and(eq(userStationAssignments.userId, userId), wsFilter(userStationAssignments)));
+      if (stationIds.length === 0) return [];
+      // Insert new — first is primary
+      const values = stationIds.map((stationId, i) => ({
+        userId,
+        stationId,
+        isPrimary: i === 0,
+        assignedBy,
+      }));
+      return tx.insert(userStationAssignments).values(values.map(v => wsInsert(v))).returning();
+    });
   }
 
   /**

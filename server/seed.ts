@@ -1,12 +1,26 @@
 import { storage } from "./storage.js";
 import { hashPassword } from "./auth.js";
+import { db } from "./db.js";
+import { workspaces } from "../shared/schema.js";
 
 export async function seedDatabase() {
+  if (process.env.NODE_ENV === "production") {
+    console.warn("seedDatabase skipped: refusing to seed in production");
+    return;
+  }
+
+  // Ensure the "default" workspace exists before creating users
+  await db
+    .insert(workspaces)
+    .values({ id: "default", name: "Default Workspace", slug: "default" })
+    .onConflictDoNothing();
+
   const existing = await storage.getUserByUsername("admin");
   if (existing) return;
 
   const adminPassword = await hashPassword("admin123");
-  await storage.createUser({ username: "admin", password: adminPassword, displayName: "Admin User", role: "admin", language: "en", theme: "dark" });
+  const adminUser = await storage.createUser({ username: "admin", password: adminPassword, displayName: "Admin User", role: "admin", language: "en", theme: "dark" });
+  const adminId = adminUser.id;
 
   const pw2 = await hashPassword("maria123");
   await storage.createUser({ username: "maria", password: pw2, displayName: "Maria K.", role: "coordinator", station: "ATH-MAIN", language: "el", theme: "dark" });
@@ -49,9 +63,9 @@ export async function seedDatabase() {
   await storage.createNotification({ type: "ai_insight", severity: "warning", title: "Impending Fleet Shortage", body: "Projected shortage of Category B vehicles tomorrow afternoon.", read: false, metadata: {} });
   await storage.createNotification({ type: "system", severity: "info", title: "Data Import Completed", body: "Reservations CSV imported successfully.", read: true, metadata: {} });
 
-  await storage.createAutomationRule({ name: "QC Fail Alert", description: "When a QC inspection fails, alert the station supervisor and create a rework task", trigger: "qc_fail", conditions: { severity: "high" }, actions: [{ type: "notify", target: "supervisor" }, { type: "create_task", taskType: "rework" }], createdBy: 1, scope: "shared", active: true, version: 1 });
-  await storage.createAutomationRule({ name: "Customer Evidence Upload", description: "When a customer uploads damage evidence, notify the station and attach to reservation", trigger: "customer_upload", conditions: {}, actions: [{ type: "notify", target: "station" }, { type: "link_evidence" }], createdBy: 1, scope: "shared", active: true, version: 1 });
-  await storage.createAutomationRule({ name: "SLA Breach Warning", description: "When wash queue SLA is about to breach, escalate to coordinator", trigger: "sla_warning", conditions: { minutesBefore: 10 }, actions: [{ type: "escalate", target: "coordinator" }], createdBy: 1, scope: "shared", active: false, version: 1 });
+  await storage.createAutomationRule({ name: "QC Fail Alert", description: "When a QC inspection fails, alert the station supervisor and create a rework task", trigger: "qc_fail", conditions: { severity: "high" }, actions: [{ type: "notify", target: "supervisor" }, { type: "create_task", taskType: "rework" }], createdBy: adminId, scope: "shared", active: true, version: 1 });
+  await storage.createAutomationRule({ name: "Customer Evidence Upload", description: "When a customer uploads damage evidence, notify the station and attach to reservation", trigger: "customer_upload", conditions: {}, actions: [{ type: "notify", target: "station" }, { type: "link_evidence" }], createdBy: adminId, scope: "shared", active: true, version: 1 });
+  await storage.createAutomationRule({ name: "SLA Breach Warning", description: "When wash queue SLA is about to breach, escalate to coordinator", trigger: "sla_warning", conditions: { minutesBefore: 10 }, actions: [{ type: "escalate", target: "coordinator" }], createdBy: adminId, scope: "shared", active: false, version: 1 });
 
   await storage.createEntityRoom({ entityType: "vehicle", entityId: "YHA-1234", title: "YHA-1234 Breakdown Discussion", status: "open", priority: "critical", metadata: { vehiclePlate: "YHA-1234" } });
   await storage.createEntityRoom({ entityType: "shift", entityId: "week-2026-03-09", title: "Week 10 Shift Planning", status: "open", priority: "normal", metadata: {} });

@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
+import { configResolver } from "../config/resolver.js";
 import {
   entityRoomPatchSchema, workspaceMemoryPatchSchema, systemPolicyPatchSchema,
   moduleRegistryPatchSchema, activityFeedSchema, digitalTwinSchema, roomMessageSchema,
@@ -168,7 +169,8 @@ export function registerWorkspaceRoutes(app: Express) {
       let affectedEntities: Array<{ id: number; reason: string }> = [];
 
       if (category === "retention") {
-        const maxAgeDays = Number(rule.maxAgeDays) || 90;
+        const defaultRetention = await configResolver.getNumber('operational.activity_retention_days');
+        const maxAgeDays = Number(rule.maxAgeDays) || defaultRetention;
         const entityType = String(rule.entityType || "audit_log");
         if (entityType === "audit_log") {
           const cutoff = new Date(Date.now() - maxAgeDays * 86400000);
@@ -421,10 +423,10 @@ export function registerWorkspaceRoutes(app: Express) {
 
   // MACRO EXECUTION
   const ALLOWED_MACRO_STEP_TYPES = ['navigate'] as const;
-  const MAX_MACRO_STEPS = 10;
 
   app.post("/api/custom-actions/:id/execute", requireAuth, async (req, res, next) => {
     try {
+      const MAX_MACRO_STEPS = await configResolver.getNumber('operational.max_macro_steps');
       const user = req.user as Express.User;
       const action = await storage.getCustomAction(Number(req.params.id));
       if (!action) return res.status(404).json({ message: "Not found" });

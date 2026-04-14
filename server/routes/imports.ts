@@ -179,7 +179,7 @@ export function registerImportRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.post("/api/imports/:id/apply", requireAuth, auditLog({ action: AUDIT_ACTIONS.CREATE, entityType: 'import_apply' }), async (req, res, next) => {
+  app.post("/api/imports/:id/apply", requireRole("admin", "supervisor"), auditLog({ action: AUDIT_ACTIONS.CREATE, entityType: 'import_apply' }), async (req, res, next) => {
     try {
       const user = req.user as Express.User;
       const existing = await storage.getImport(Number(req.params.id));

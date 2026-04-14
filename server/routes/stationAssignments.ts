@@ -6,10 +6,11 @@ import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 import { resolveStationScope } from "../middleware/stationScope.js";
+import { validateIdParam, validateRequest } from "../middleware/validation.js";
 
 export function registerStationAssignmentRoutes(app: Express) {
   // ─── GET USER'S STATION ASSIGNMENTS ───
-  app.get("/api/station-assignments/users/:id", requireAuth, requireRole("admin", "supervisor"), async (req, res, next) => {
+  app.get("/api/station-assignments/users/:id", requireAuth, requireRole("admin", "supervisor"), validateIdParam(), async (req, res, next) => {
     try {
       const userId = Number(req.params.id);
       const assignments = await storage.getUserStationAssignments(userId);
@@ -18,7 +19,7 @@ export function registerStationAssignmentRoutes(app: Express) {
   });
 
   // ─── GET STATION'S USER ASSIGNMENTS ───
-  app.get("/api/station-assignments/stations/:id", requireAuth, requireRole("admin", "supervisor"), async (req, res, next) => {
+  app.get("/api/station-assignments/stations/:id", requireAuth, requireRole("admin", "supervisor"), validateIdParam(), async (req, res, next) => {
     try {
       const stationId = Number(req.params.id);
       const assignments = await storage.getStationUsers(stationId);
@@ -27,7 +28,7 @@ export function registerStationAssignmentRoutes(app: Express) {
   });
 
   // ─── SET USER'S STATIONS (REPLACE ALL) ───
-  app.put("/api/station-assignments/users/:id", requireAuth, requireRole("admin"), async (req, res, next) => {
+  app.put("/api/station-assignments/users/:id", requireAuth, requireRole("admin"), validateIdParam(), async (req, res, next) => {
     try {
       const userId = Number(req.params.id);
       const schema = z.object({
@@ -59,7 +60,9 @@ export function registerStationAssignmentRoutes(app: Express) {
   });
 
   // ─── REMOVE SINGLE ASSIGNMENT ───
-  app.delete("/api/station-assignments/users/:userId/stations/:stationId", requireAuth, requireRole("admin"), async (req, res, next) => {
+  app.delete("/api/station-assignments/users/:userId/stations/:stationId", requireAuth, requireRole("admin"),
+    validateRequest({ params: z.object({ userId: z.coerce.number().int().positive(), stationId: z.coerce.number().int().positive() }) }),
+    async (req, res, next) => {
     try {
       const userId = Number(req.params.userId);
       const stationId = Number(req.params.stationId);

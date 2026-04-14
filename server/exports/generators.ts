@@ -19,7 +19,7 @@ import {
   executiveBriefings,
 } from "../../shared/schema.js";
 import type { ExportType, ExportFormat } from "./policy.js";
-import { MAX_EXPORT_ROWS } from "./policy.js";
+import { getMaxExportRows } from "./policy.js";
 
 const LOCAL_UPLOAD_DIR = path.resolve(process.cwd(), "uploads");
 const _EXPORTS_DIR = path.join(LOCAL_UPLOAD_DIR, "exports");
@@ -87,19 +87,19 @@ function parseDateFilters(filters?: Record<string, unknown>): { from?: Date; to?
 
 // ─── table-specific generators ───
 
-const TABLE_GENERATORS: Record<ExportType, (filters?: Record<string, unknown>) => Promise<{ columns: string[]; rows: Record<string, unknown>[] }>> = {
-  audit_log: async (filters) => {
+const TABLE_GENERATORS: Record<ExportType, (maxRows: number, filters?: Record<string, unknown>) => Promise<{ columns: string[]; rows: Record<string, unknown>[] }>> = {
+  audit_log: async (maxRows, filters) => {
     const columns = ["id", "userId", "action", "entityType", "entityId", "details", "ipAddress", "createdAt"];
     const { from, to } = parseDateFilters(filters);
     const conds = [];
     if (from) conds.push(gte(auditLog.createdAt, from));
     if (to) conds.push(lt(auditLog.createdAt, to));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(auditLog).where(where).orderBy(desc(auditLog.createdAt)).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(auditLog).where(where).orderBy(desc(auditLog.createdAt)).limit(maxRows);
     return { columns, rows };
   },
 
-  incidents: async (filters) => {
+  incidents: async (maxRows, filters) => {
     const columns = ["id", "title", "severity", "status", "category", "reportedBy", "assignedTo", "vehicleId", "stationId", "resolvedAt", "closedAt", "createdAt", "updatedAt"];
     const conds = [];
     const { from, to } = parseDateFilters(filters);
@@ -108,11 +108,11 @@ const TABLE_GENERATORS: Record<ExportType, (filters?: Record<string, unknown>) =
     if (filters?.stationId) conds.push(eq(incidents.stationId, Number(filters.stationId)));
     if (filters?.status) conds.push(eq(incidents.status, String(filters.status)));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(incidents).where(where).orderBy(desc(incidents.createdAt)).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(incidents).where(where).orderBy(desc(incidents.createdAt)).limit(maxRows);
     return { columns, rows };
   },
 
-  reservations: async (filters) => {
+  reservations: async (maxRows, filters) => {
     const columns = ["id", "vehicleId", "stationId", "customerName", "customerEmail", "status", "source", "pickupDate", "returnDate", "notes", "createdAt"];
     const conds = [];
     const { from, to } = parseDateFilters(filters);
@@ -121,11 +121,11 @@ const TABLE_GENERATORS: Record<ExportType, (filters?: Record<string, unknown>) =
     if (filters?.stationId) conds.push(eq(reservations.stationId, Number(filters.stationId)));
     if (filters?.status) conds.push(eq(reservations.status, String(filters.status)));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(reservations).where(where).orderBy(desc(reservations.createdAt)).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(reservations).where(where).orderBy(desc(reservations.createdAt)).limit(maxRows);
     return { columns, rows };
   },
 
-  repair_orders: async (filters) => {
+  repair_orders: async (maxRows, filters) => {
     const columns = ["id", "vehicleId", "incidentId", "stationId", "title", "status", "priority", "assignedTo", "estimatedCost", "actualCost", "estimatedCompletion", "completedAt", "createdAt"];
     const conds = [];
     const { from, to } = parseDateFilters(filters);
@@ -134,11 +134,11 @@ const TABLE_GENERATORS: Record<ExportType, (filters?: Record<string, unknown>) =
     if (filters?.stationId) conds.push(eq(repairOrders.stationId, Number(filters.stationId)));
     if (filters?.status) conds.push(eq(repairOrders.status, String(filters.status)));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(repairOrders).where(where).orderBy(desc(repairOrders.createdAt)).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(repairOrders).where(where).orderBy(desc(repairOrders.createdAt)).limit(maxRows);
     return { columns, rows };
   },
 
-  downtime_events: async (filters) => {
+  downtime_events: async (maxRows, filters) => {
     const columns = ["id", "vehicleId", "reason", "incidentId", "repairOrderId", "stationId", "startedAt", "endedAt", "notes", "createdAt"];
     const conds = [];
     const { from, to } = parseDateFilters(filters);
@@ -146,11 +146,11 @@ const TABLE_GENERATORS: Record<ExportType, (filters?: Record<string, unknown>) =
     if (to) conds.push(lt(downtimeEvents.createdAt, to));
     if (filters?.stationId) conds.push(eq(downtimeEvents.stationId, Number(filters.stationId)));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(downtimeEvents).where(where).orderBy(desc(downtimeEvents.createdAt)).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(downtimeEvents).where(where).orderBy(desc(downtimeEvents.createdAt)).limit(maxRows);
     return { columns, rows };
   },
 
-  kpi_snapshots: async (filters) => {
+  kpi_snapshots: async (maxRows, filters) => {
     const columns = ["id", "kpiSlug", "value", "date", "stationId", "metadata", "createdAt"];
     const conds = [];
     const { from, to } = parseDateFilters(filters);
@@ -159,21 +159,21 @@ const TABLE_GENERATORS: Record<ExportType, (filters?: Record<string, unknown>) =
     if (filters?.stationId) conds.push(eq(kpiSnapshots.stationId, Number(filters.stationId)));
     if (filters?.kpiSlug) conds.push(eq(kpiSnapshots.kpiSlug, String(filters.kpiSlug)));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(kpiSnapshots).where(where).orderBy(desc(kpiSnapshots.createdAt)).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(kpiSnapshots).where(where).orderBy(desc(kpiSnapshots.createdAt)).limit(maxRows);
     return { columns, rows };
   },
 
-  vehicles: async (filters) => {
+  vehicles: async (maxRows, filters) => {
     const columns = ["id", "plate", "model", "category", "stationId", "status", "sla", "mileage", "fuelLevel"];
     const conds = [];
     if (filters?.stationId) conds.push(eq(vehicles.stationId, Number(filters.stationId)));
     if (filters?.status) conds.push(eq(vehicles.status, String(filters.status)));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(vehicles).where(where).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(vehicles).where(where).limit(maxRows);
     return { columns, rows };
   },
 
-  executive_summaries: async (filters) => {
+  executive_summaries: async (maxRows, filters) => {
     const columns = ["id", "title", "summary", "date", "kpiSummary", "anomalySummary", "recommendations", "generatedBy", "stationId", "createdAt"];
     const conds = [];
     const { from, to } = parseDateFilters(filters);
@@ -181,7 +181,7 @@ const TABLE_GENERATORS: Record<ExportType, (filters?: Record<string, unknown>) =
     if (to) conds.push(lt(executiveBriefings.createdAt, to));
     if (filters?.stationId) conds.push(eq(executiveBriefings.stationId, Number(filters.stationId)));
     const where = conds.length ? (conds.length === 1 ? conds[0] : and(...conds)) : undefined;
-    const rows = await db.select().from(executiveBriefings).where(where).orderBy(desc(executiveBriefings.createdAt)).limit(MAX_EXPORT_ROWS);
+    const rows = await db.select().from(executiveBriefings).where(where).orderBy(desc(executiveBriefings.createdAt)).limit(maxRows);
     return { columns, rows };
   },
 };
@@ -200,7 +200,8 @@ export async function generateExport(
   const generator = TABLE_GENERATORS[exportType];
   if (!generator) throw new Error(`No generator for export type: ${exportType}`);
 
-  const { columns, rows } = await generator(filters);
+  const maxRows = await getMaxExportRows();
+  const { columns, rows } = await generator(maxRows, filters);
   const { storageKey, filename } = generateKey(exportType, format);
 
   let content: string;

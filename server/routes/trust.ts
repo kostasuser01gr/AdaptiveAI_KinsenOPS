@@ -121,9 +121,14 @@ export function registerTrustRoutes(app: Express) {
       const limit = Math.min(Number(req.query.limit) || 5000, 10000);
       const entries = await storage.getAuditLog(limit);
       const csvRows = ['id,userId,action,entityType,entityId,ipAddress,createdAt'];
+      const csvSafe = (val: string | null | undefined): string => {
+        if (val == null) return '';
+        const s = String(val).replace(/"/g, '""');
+        if (/^[=+\-@\t\r]/.test(s)) return `"'${s}"`;
+        return `"${s}"`;
+      };
       for (const e of entries) {
-        const escapedEntityId = e.entityId ? e.entityId.replace(/"/g, '""') : '';
-        csvRows.push(`${e.id},${e.userId ?? ''},${e.action},"${e.entityType}","${escapedEntityId}",${e.ipAddress ?? ''},${e.createdAt}`);
+        csvRows.push([e.id, e.userId ?? '', csvSafe(e.action), csvSafe(e.entityType), csvSafe(e.entityId), csvSafe(e.ipAddress), e.createdAt].join(','));
       }
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=audit-log-${new Date().toISOString().slice(0,10)}.csv`);

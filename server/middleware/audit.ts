@@ -1,5 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../storage.js";
+import { getWorkspaceScope } from "./workspaceContext.js";
+import { logger } from "../observability/logger.js";
 
 const AUDIT_ACTIONS = {
   CREATE: 'create',
@@ -26,12 +28,16 @@ export function auditLog(options: AuditOptions) {
     const originalJson = res.json.bind(res);
     const originalEnd = res.end.bind(res);
 
+    let audited = false;
     const recordAudit = (data?: unknown) => {
+      if (audited) return;
+      audited = true;
       if (res.statusCode >= 200 && res.statusCode < 300) {
         const user = req.user as Express.User | undefined;
         const entityId = req.params.id || (data && typeof data === 'object' && 'id' in data ? String((data as { id: unknown }).id) : undefined);
 
         storage.createAuditEntry({
+          workspaceId: getWorkspaceScope(),
           userId: user?.id || null,
           action: options.action,
           entityType: options.entityType,
@@ -44,7 +50,7 @@ export function auditLog(options: AuditOptions) {
           },
           ipAddress: req.ip || null,
         }).catch(err => {
-          console.error('Failed to create audit entry:', err);
+          logger.error('Failed to create audit entry:', err);
         });
       }
     };

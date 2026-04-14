@@ -4,10 +4,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users as Shield, MoreHorizontal, UserPlus, AlertCircle } from 'lucide-react';
+import { Users as Shield, MoreHorizontal, UserPlus, AlertCircle, Copy, Loader2 } from 'lucide-react';
+import { CountUp, Crossfade, MotionDialog } from '@/components/motion';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,14 +18,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -61,6 +56,10 @@ export default function UsersPage() {
   const [roleDialogUser, setRoleDialogUser] = useState<{ id: number; displayName: string; role: string } | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>('');
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; displayName: string } | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState('agent');
+  const [generatedToken, setGeneratedToken] = useState<string | null>(null);
 
   const { data: users = [], isLoading, error } = useQuery<any[]>({
     queryKey: ["/api/users"],
@@ -83,13 +82,37 @@ export default function UsersPage() {
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/users/${id}`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, deletedId) => {
+      const name = deleteTarget?.displayName || `User #${deletedId}`;
       qc.invalidateQueries({ queryKey: ["/api/users"] });
-      toast({ title: "User removed", description: `${deleteTarget?.displayName} has been removed.` });
+      toast({ title: "User removed", description: `${name} has been removed.` });
       setDeleteTarget(null);
     },
     onError: () => toast({ title: "Error", description: "Failed to remove user.", variant: "destructive" }),
   });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (data: { email?: string; role: string }) => {
+      const res = await apiRequest("POST", "/api/invite-tokens", data);
+      return res.json();
+    },
+    onSuccess: (data: { token: string }) => {
+      setGeneratedToken(data.token);
+      toast({ title: "Invite created", description: "Token generated. Share it with the new user." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to create invite.", variant: "destructive" }),
+  });
+
+  const handleCreateInvite = () => {
+    inviteMutation.mutate({ email: inviteEmail || undefined, role: inviteRole });
+  };
+
+  const handleCloseInvite = () => {
+    setInviteOpen(false);
+    setInviteEmail('');
+    setInviteRole('agent');
+    setGeneratedToken(null);
+  };
 
   const activeCount = users.filter((u: any) => u.id !== undefined).length;
   const roleSet = new Set(users.map((u: any) => u.role));
@@ -105,7 +128,7 @@ export default function UsersPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">{t('users')}</h1>
         </div>
-        <Button size="sm" className="gap-2" disabled title="User invitations are not yet available">
+        <Button size="sm" className="gap-2" onClick={() => setInviteOpen(true)}>
           <UserPlus className="h-4 w-4" />
           Invite User
         </Button>
@@ -120,7 +143,7 @@ export default function UsersPage() {
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total Users</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12" /> : activeCount}</div>
+                <div className="text-2xl font-bold"><Crossfade activeKey={isLoading ? 'loading' : 'value'}>{isLoading ? <Skeleton className="h-8 w-12" /> : <CountUp value={activeCount} />}</Crossfade></div>
               </CardContent>
             </Card>
             <Card>
@@ -128,7 +151,7 @@ export default function UsersPage() {
                 <CardTitle className="text-sm font-medium text-muted-foreground">Active Roles</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{isLoading ? <Skeleton className="h-8 w-12" /> : roleSet.size}</div>
+                <div className="text-2xl font-bold"><Crossfade activeKey={isLoading ? 'loading' : 'value'}>{isLoading ? <Skeleton className="h-8 w-12" /> : <CountUp value={roleSet.size} />}</Crossfade></div>
               </CardContent>
             </Card>
             <Card>
@@ -224,12 +247,7 @@ export default function UsersPage() {
       </ScrollArea>
 
       {/* Role change dialog */}
-      <Dialog open={!!roleDialogUser} onOpenChange={(open) => !open && setRoleDialogUser(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Change Role</DialogTitle>
-            <DialogDescription>Update the role for {roleDialogUser?.displayName}</DialogDescription>
-          </DialogHeader>
+      <MotionDialog open={!!roleDialogUser} onOpenChange={(open) => !open && setRoleDialogUser(null)} title="Change Role" description={`Update the role for ${roleDialogUser?.displayName}`}>
           <Select value={selectedRole} onValueChange={setSelectedRole}>
             <SelectTrigger>
               <SelectValue placeholder="Select role" />
@@ -240,25 +258,17 @@ export default function UsersPage() {
               ))}
             </SelectContent>
           </Select>
-          <DialogFooter>
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setRoleDialogUser(null)}>Cancel</Button>
             <Button onClick={handleRoleChange} disabled={updateRoleMutation.isPending || selectedRole === roleDialogUser?.role}>
               Save
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+      </MotionDialog>
 
       {/* Delete confirm dialog */}
-      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove User</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to remove <strong>{deleteTarget?.displayName}</strong>? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
+      <MotionDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)} title="Remove User" description={`Are you sure you want to remove ${deleteTarget?.displayName}? This action cannot be undone.`}>
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
             <Button
               variant="destructive"
@@ -267,9 +277,51 @@ export default function UsersPage() {
             >
               Remove
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+      </MotionDialog>
+
+      {/* Invite user dialog */}
+      <MotionDialog open={inviteOpen} onOpenChange={(open) => !open && handleCloseInvite()} title="Invite User" description="Generate an invite token to share with a new team member.">
+          {generatedToken ? (
+            <div className="space-y-3">
+              <Label>Invite Token</Label>
+              <div className="flex items-center gap-2">
+                <Input readOnly value={generatedToken} className="font-mono text-xs" />
+                <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(generatedToken); toast({ title: "Copied!" }); }}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Share this token securely. It expires in 7 days.</p>
+              <div className="flex justify-end"><Button onClick={handleCloseInvite}>Done</Button></div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="invite-email">Email (optional)</Label>
+                <Input id="invite-email" placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                <p className="text-xs text-muted-foreground">If set, only this email can register with the token.</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Role</Label>
+                <Select value={inviteRole} onValueChange={setInviteRole}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {ROLES.map((r) => (
+                      <SelectItem key={r} value={r}>{ROLE_LABELS[r]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={handleCloseInvite}>Cancel</Button>
+                <Button onClick={handleCreateInvite} disabled={inviteMutation.isPending}>
+                  {inviteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Generate Token
+                </Button>
+              </div>
+            </div>
+          )}
+      </MotionDialog>
     </div>
   );
 }

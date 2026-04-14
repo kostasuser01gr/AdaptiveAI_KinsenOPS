@@ -1,5 +1,8 @@
 import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod/v4';
 import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,22 +11,37 @@ import { Search, Car, Clock, AlertTriangle, CheckCircle2, ShieldAlert, Loader2, 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
+import { TableSkeleton } from "@/components/skeletons";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/useAuth";
+import { AnimatedList, AnimatedListItem, MotionDialog } from '@/components/motion';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import { usePageLayout } from "@/hooks/useLayoutPreferences";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Settings2 } from 'lucide-react';
+import { insertVehicleSchema } from "@shared/schema";
 import type { Vehicle } from "@shared/schema";
+
+const addVehicleSchema = insertVehicleSchema.pick({
+  plate: true,
+  model: true,
+  category: true,
+  status: true,
+  sla: true,
+}).extend({
+  plate: z.string().min(1, "License plate is required"),
+  model: z.string().min(1, "Model is required"),
+});
+type AddVehicleValues = z.infer<typeof addVehicleSchema>;
 
 function VehicleMemoryPanel({ vehicle }: { vehicle: Vehicle }) {
   const { data: evidence } = useQuery({
     queryKey: ["/api/vehicles", vehicle.id, "evidence"],
-    queryFn: async () => { const r = await fetch(`/api/vehicles/${vehicle.id}/evidence`, { credentials: 'include' }); return r.json(); },
   });
   const items = Array.isArray(evidence) ? evidence : [];
   return (
@@ -81,7 +99,11 @@ export default function FleetPage() {
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [selectedVehicleId, setSelectedVehicleId] = React.useState<number | null>(null);
-  const [newVehicle, setNewVehicle] = React.useState({ plate: '', model: '', category: 'B', status: 'ready', sla: 'normal', nextBooking: '', timerInfo: '-' });
+  const [_newVehicle, _setNewVehicle] = React.useState({ plate: '', model: '', category: 'B', status: 'ready', sla: 'normal', nextBooking: '', timerInfo: '-' });
+  const vehicleForm = useForm<AddVehicleValues>({
+    resolver: zodResolver(addVehicleSchema),
+    defaultValues: { plate: '', model: '', category: 'B', status: 'ready', sla: 'normal' },
+  });
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const canDelete = user && ['admin', 'coordinator', 'supervisor'].includes(user.role);
 
@@ -104,18 +126,20 @@ export default function FleetPage() {
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => { const res = await apiRequest("POST", "/api/vehicles", data); return res.json(); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }); toast({ title: "Vehicle added" }); setDialogOpen(false); setNewVehicle({ plate: '', model: '', category: 'B', status: 'ready', sla: 'normal', nextBooking: '', timerInfo: '-' }); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }); toast({ title: "Vehicle added" }); setDialogOpen(false); vehicleForm.reset(); },
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/vehicles/${id}`); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }); toast({ title: "Vehicle archived" }); setSelectedVehicleId(null); },
+    onError: (err: Error) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => { const res = await apiRequest("PATCH", `/api/vehicles/${id}`, data); return res.json(); },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }),
+    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
   const washQueueMutation = useMutation({
@@ -161,6 +185,15 @@ export default function FleetPage() {
     return matchSearch && matchStatus;
   });
 
+  // Virtual scrolling for large fleet tables
+  const tableContainerRef = React.useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: filtered.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 52,
+    overscan: 10,
+  });
+
   const stats = {
     total: allVehicles.length,
     ready: allVehicles.filter(v => v.status === 'ready').length,
@@ -195,42 +228,47 @@ export default function FleetPage() {
             data-testid="button-log-incident">
             <ShieldAlert className="h-4 w-4" /> Log Incident
           </Button>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" data-testid="button-add-vehicle"><Plus className="h-4 w-4" /> Add Vehicle</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Add New Vehicle</DialogTitle><DialogDescription>Register a new vehicle to the fleet.</DialogDescription></DialogHeader>
-              <form onSubmit={(e) => { e.preventDefault(); createMutation.mutate(newVehicle); }} className="space-y-4 mt-2">
+          <Button className="gap-2" onClick={() => setDialogOpen(true)} data-testid="button-add-vehicle"><Plus className="h-4 w-4" /> Add Vehicle</Button>
+          <MotionDialog open={dialogOpen} onOpenChange={setDialogOpen} title="Add New Vehicle" description="Register a new vehicle to the fleet.">
+              <Form {...vehicleForm}>
+              <form onSubmit={vehicleForm.handleSubmit((values) => createMutation.mutate({ ...values, plate: values.plate.toUpperCase() }))} className="space-y-4 mt-2">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2"><Label>License Plate</Label><Input value={newVehicle.plate} onChange={e => setNewVehicle({...newVehicle, plate: e.target.value.toUpperCase()})} required data-testid="input-vehicle-plate" /></div>
-                  <div className="space-y-2"><Label>Model</Label><Input value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} required data-testid="input-vehicle-model" /></div>
+                  <FormField control={vehicleForm.control} name="plate" render={({ field }) => (
+                    <FormItem><FormLabel>License Plate</FormLabel><FormControl><Input {...field} onChange={e => field.onChange(e.target.value.toUpperCase())} data-testid="input-vehicle-plate" /></FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={vehicleForm.control} name="model" render={({ field }) => (
+                    <FormItem><FormLabel>Model</FormLabel><FormControl><Input {...field} data-testid="input-vehicle-model" /></FormControl><FormMessage /></FormItem>
+                  )} />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2"><Label>Category</Label>
-                    <Select value={newVehicle.category} onValueChange={v => setNewVehicle({...newVehicle, category: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {['A','B','C','D','E'].map(c => <SelectItem key={c} value={c}>Category {c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2"><Label>Status</Label>
-                    <Select value={newVehicle.status} onValueChange={v => setNewVehicle({...newVehicle, status: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ready">Ready</SelectItem><SelectItem value="washing">Washing</SelectItem>
-                        <SelectItem value="maintenance">Maintenance</SelectItem><SelectItem value="returned">Returned</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <FormField control={vehicleForm.control} name="category" render={({ field }) => (
+                    <FormItem><FormLabel>Category</FormLabel><FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {['A','B','C','D','E'].map(c => <SelectItem key={c} value={c}>Category {c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </FormControl><FormMessage /></FormItem>
+                  )} />
+                  <FormField control={vehicleForm.control} name="status" render={({ field }) => (
+                    <FormItem><FormLabel>Status</FormLabel><FormControl>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="ready">Ready</SelectItem><SelectItem value="washing">Washing</SelectItem>
+                          <SelectItem value="maintenance">Maintenance</SelectItem><SelectItem value="returned">Returned</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl><FormMessage /></FormItem>
+                  )} />
                 </div>
                 <Button type="submit" disabled={createMutation.isPending} className="w-full" data-testid="button-submit-vehicle">
                   {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null} Add Vehicle
                 </Button>
               </form>
-            </DialogContent>
-          </Dialog>
+              </Form>
+          </MotionDialog>
         </div>
       </div>
 
@@ -248,7 +286,7 @@ export default function FleetPage() {
         <div className={`flex-1 flex flex-col ${selectedVehicle ? 'w-[60%]' : 'w-full'}`}>
           <ScrollArea className="flex-1 content-visibility-auto">
             <div className="p-4 md:p-6 space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+              <AnimatedList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                 {[
                   { label: 'Total', value: stats.total, icon: Car, color: 'text-foreground' },
                   { label: 'Ready', value: stats.ready, icon: CheckCircle2, color: 'text-green-400' },
@@ -258,15 +296,17 @@ export default function FleetPage() {
                   { label: 'High Priority', value: stats.highPriority, icon: AlertTriangle, color: stats.highPriority > 0 ? 'text-red-400' : 'text-muted-foreground' },
                   { label: 'Stuck', value: stats.stuckTooLong, icon: Clock, color: stats.stuckTooLong > 0 ? 'text-orange-400' : 'text-muted-foreground' },
                 ].map((s, i) => (
-                  <Card key={i} className="glass-panel hover:border-primary/30 cursor-pointer transition-colors">
-                    <CardContent className="p-3 text-center">
-                      <s.icon className={`h-4 w-4 ${s.color} mx-auto mb-1`} />
-                      <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
-                      <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                    </CardContent>
-                  </Card>
+                  <AnimatedListItem key={i}>
+                    <Card className="glass-panel hover:border-primary/30 cursor-pointer transition-colors">
+                      <CardContent className="p-3 text-center">
+                        <s.icon className={`h-4 w-4 ${s.color} mx-auto mb-1`} />
+                        <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+                        <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                      </CardContent>
+                    </Card>
+                  </AnimatedListItem>
                 ))}
-              </div>
+              </AnimatedList>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <Card className="glass-panel col-span-2">
@@ -343,8 +383,9 @@ export default function FleetPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   {isLoading ? (
-                    <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                    <TableSkeleton rows={6} columns={5} />
                   ) : (
+                    <div ref={tableContainerRef} className="max-h-[60vh] overflow-auto">
                     <Table>
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
@@ -359,7 +400,14 @@ export default function FleetPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filtered.map((v) => (
+                        {filtered.length > 0 && (
+                          <>
+                            {rowVirtualizer.getVirtualItems().length > 0 && (
+                              <tr style={{ height: rowVirtualizer.getVirtualItems()[0].start }} />
+                            )}
+                            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                              const v = filtered[virtualRow.index];
+                              return (
                           <TableRow key={v.id} className={`cursor-pointer hover:bg-muted/50 ${v.sla === 'high' ? 'bg-destructive/5' : ''} ${selectedVehicle?.id === v.id ? 'bg-primary/10' : ''}`}
                             onClick={() => setSelectedVehicleId(selectedVehicleId === v.id ? null : v.id)} data-testid={`row-vehicle-${v.id}`}>
                             {isColVisible('vehicle') && <TableCell>
@@ -390,19 +438,26 @@ export default function FleetPage() {
                                   <Eye className="h-3.5 w-3.5" />
                                 </Button>
                                 {canDelete && (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(v.id); }} data-testid={`button-delete-${v.id}`}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={(e) => { e.stopPropagation(); if (window.confirm(`Archive vehicle ${v.plate}?`)) deleteMutation.mutate(v.id); }} data-testid={`button-delete-${v.id}`}>
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
                               </div>
                             </TableCell>}
                           </TableRow>
-                        ))}
+                              );
+                            })}
+                            {rowVirtualizer.getVirtualItems().length > 0 && (
+                              <tr style={{ height: rowVirtualizer.getTotalSize() - (rowVirtualizer.getVirtualItems().at(-1)?.end ?? 0) }} />
+                            )}
+                          </>
+                        )}
                         {filtered.length === 0 && (
                           <TableRow><TableCell colSpan={visibleColumns.length} className="text-center py-8 text-muted-foreground">{search ? 'No vehicles match' : 'No vehicles yet'}</TableCell></TableRow>
                         )}
                       </TableBody>
                     </Table>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -434,7 +489,7 @@ export default function FleetPage() {
                     data-testid="button-action-wash">
                     <Activity className="h-3 w-3" /> Send to Wash Queue
                   </Button>
-                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" onClick={() => updateMutation.mutate({ id: selectedVehicle.id, data: { status: 'ready' } })} data-testid="button-action-ready">
+                  <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate({ id: selectedVehicle.id, data: { status: 'ready' } })} data-testid="button-action-ready">
                     <CheckCircle2 className="h-3 w-3" /> Mark as Ready
                   </Button>
                   {/* Transfer Station: opens dialog to initiate inter-station transfer */}
@@ -446,7 +501,7 @@ export default function FleetPage() {
                     <ShieldAlert className="h-3 w-3" /> Log Incident
                   </Button>
                   {canDelete && (
-                    <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs text-destructive border-destructive/30" onClick={() => deleteMutation.mutate(selectedVehicle.id)} data-testid="button-action-archive">
+                    <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs text-destructive border-destructive/30" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(selectedVehicle.id)} data-testid="button-action-archive">
                       <Trash2 className="h-3 w-3" /> Archive Vehicle
                     </Button>
                   )}
@@ -482,7 +537,7 @@ function WorkshopJobsPanel({ vehicleId }: { vehicleId: number }) {
   // We query repair orders for this vehicle first, then get workshop jobs linked to them
   const { data: repairOrders } = useQuery<Array<{ id: number; title: string; status: string }>>({
     queryKey: ["/api/repair-orders", { vehicleId }],
-    queryFn: () => fetch(`/api/repair-orders?vehicleId=${vehicleId}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => apiRequest("GET", `/api/repair-orders?vehicleId=${vehicleId}`).then(r => r.json()),
     enabled: !!vehicleId,
   });
 
@@ -499,7 +554,7 @@ function WorkshopJobsPanel({ vehicleId }: { vehicleId: number }) {
     updatedAt: string;
   }>>({
     queryKey: ["/api/workshop-jobs", { repairOrderId: firstRoId }],
-    queryFn: () => fetch(`/api/workshop-jobs?repairOrderId=${firstRoId}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => apiRequest("GET", `/api/workshop-jobs?repairOrderId=${firstRoId}`).then(r => r.json()),
     enabled: !!firstRoId,
   });
 
@@ -577,17 +632,11 @@ function TransferStationButton({ vehicle, stations }: { vehicle: Vehicle; statio
   const otherStations = stations.filter(s => s.id !== vehicle.stationId);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" data-testid="button-action-transfer">
-          <MapPin className="h-3 w-3" /> Transfer Station
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Transfer {vehicle.plate}</DialogTitle>
-          <DialogDescription>Request a vehicle transfer to another station.</DialogDescription>
-        </DialogHeader>
+    <>
+      <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs" onClick={() => setOpen(true)} data-testid="button-action-transfer">
+        <MapPin className="h-3 w-3" /> Transfer Station
+      </Button>
+      <MotionDialog open={open} onOpenChange={setOpen} title={`Transfer ${vehicle.plate}`} description="Request a vehicle transfer to another station.">
         <div className="space-y-4 mt-2">
           <div className="space-y-2">
             <Label>Destination Station</Label>
@@ -606,8 +655,8 @@ function TransferStationButton({ vehicle, stations }: { vehicle: Vehicle; statio
             {transferMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />} Request Transfer
           </Button>
         </div>
-      </DialogContent>
-    </Dialog>
+      </MotionDialog>
+    </>
   );
 }
 
@@ -619,12 +668,11 @@ function PositionsPanel({ stations }: { stations: Array<{ id: number; name: stri
 
   const { data: positions, isLoading } = useQuery<Array<any>>({
     queryKey: ["/api/positions", { stationId: stationFilter !== 'all' ? stationFilter : undefined }],
-    queryFn: () => fetch(`/api/positions${stationFilter !== 'all' ? `?stationId=${stationFilter}` : ''}`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => apiRequest("GET", `/api/positions${stationFilter !== 'all' ? `?stationId=${stationFilter}` : ''}`).then(r => r.json()),
   });
 
   const { data: assignments } = useQuery<Array<any>>({
     queryKey: ["/api/position-assignments"],
-    queryFn: () => fetch("/api/position-assignments", { credentials: "include" }).then(r => r.json()),
   });
 
   const createPositionMutation = useMutation({
@@ -642,7 +690,7 @@ function PositionsPanel({ stations }: { stations: Array<{ id: number; name: stri
 
   const positionList = Array.isArray(positions) ? positions : [];
   const assignmentList = Array.isArray(assignments) ? assignments : [];
-  const assignedPositionIds = new Set(assignmentList.filter((a: any) => !a.releasedAt).map((a: any) => a.positionId));
+  const assignedPositionIds = new Set(assignmentList.filter((a: any) => !a.releasedAt && a.positionId != null).map((a: any) => a.positionId));
 
   const typeColors: Record<string, string> = {
     parking: 'bg-blue-500/20 text-blue-400',
@@ -730,7 +778,7 @@ function PositionsPanel({ stations }: { stations: Array<{ id: number; name: stri
       <Card className="glass-panel">
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            <TableSkeleton rows={5} columns={5} />
           ) : (
             <Table>
               <TableHeader>
@@ -771,7 +819,6 @@ function TransfersPanel({ stations }: { stations: Array<{ id: number; name: stri
 
   const { data: transfers, isLoading } = useQuery<Array<any>>({
     queryKey: ["/api/transfers"],
-    queryFn: () => fetch("/api/transfers", { credentials: "include" }).then(r => r.json()),
   });
 
   const updateTransferMutation = useMutation({
@@ -822,7 +869,7 @@ function TransfersPanel({ stations }: { stations: Array<{ id: number; name: stri
       <Card className="glass-panel">
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+            <TableSkeleton rows={4} columns={6} />
           ) : (
             <Table>
               <TableHeader>
@@ -839,12 +886,12 @@ function TransfersPanel({ stations }: { stations: Array<{ id: number; name: stri
                     <TableCell className="text-right">
                       {canManage && t.status === 'requested' && (
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updateTransferMutation.mutate({ id: t.id, status: 'in_transit' })}>Dispatch</Button>
-                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" onClick={() => updateTransferMutation.mutate({ id: t.id, status: 'cancelled' })}>Cancel</Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={updateTransferMutation.isPending} onClick={() => updateTransferMutation.mutate({ id: t.id, status: 'in_transit' })}>Dispatch</Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive" disabled={updateTransferMutation.isPending} onClick={() => updateTransferMutation.mutate({ id: t.id, status: 'cancelled' })}>Cancel</Button>
                         </div>
                       )}
                       {canManage && t.status === 'in_transit' && (
-                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => updateTransferMutation.mutate({ id: t.id, status: 'delivered' })}>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs" disabled={updateTransferMutation.isPending} onClick={() => updateTransferMutation.mutate({ id: t.id, status: 'delivered' })}>
                           <CheckCircle2 className="h-3 w-3 mr-1" /> Mark Delivered
                         </Button>
                       )}

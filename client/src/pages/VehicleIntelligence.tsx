@@ -1,5 +1,6 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -89,14 +90,15 @@ function DamageHeatmap({ onZoneClick, zoneHits }: { onZoneClick: (zone: string) 
 export default function VehicleIntelligencePage() {
   const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
   const vehicles = Array.isArray(vehiclesData) ? vehiclesData : [];
-  const [selectedVehicle, setSelectedVehicle] = React.useState<any>(null);
+  const [selectedVehicleId, setSelectedVehicleId] = React.useState<number | null>(null);
+  const selectedVehicle = vehicles.find((v: any) => v.id === selectedVehicleId) ?? null;
   const [searchTerm, setSearchTerm] = React.useState('');
   const [selectedZone, setSelectedZone] = React.useState<string | null>(null);
 
   const { data: evidenceData } = useQuery({
     queryKey: ["/api/vehicles", selectedVehicle?.id, "evidence"],
     queryFn: async () => {
-      const res = await fetch(`/api/vehicles/${selectedVehicle.id}/evidence`, { credentials: 'include' });
+      const res = await apiRequest("GET", `/api/vehicles/${selectedVehicle.id}/evidence`);
       return res.json();
     },
     enabled: !!selectedVehicle?.id,
@@ -105,10 +107,16 @@ export default function VehicleIntelligencePage() {
 
   const { data: trendsResult } = useQuery<{ totalWashes: number; totalEvidence: number; recentWashes: number; recentEvidence: number; topZones: { zone: string; count: number }[] }>({
     queryKey: ["/api/vehicles", selectedVehicle?.id, "trends"],
-    queryFn: () => fetch(`/api/vehicles/${selectedVehicle.id}/trends`, { credentials: 'include' }).then(r => r.json()),
+    queryFn: () => apiRequest("GET", `/api/vehicles/${selectedVehicle.id}/trends`).then(r => r.json()),
     enabled: !!selectedVehicle?.id,
   });
-  const vehicleTrends = trendsResult || { totalWashes: 0, totalEvidence: 0, recentWashes: 0, recentEvidence: 0, topZones: [] };
+  const vehicleTrends = {
+    totalWashes: trendsResult?.totalWashes ?? 0,
+    totalEvidence: trendsResult?.totalEvidence ?? 0,
+    recentWashes: trendsResult?.recentWashes ?? 0,
+    recentEvidence: trendsResult?.recentEvidence ?? 0,
+    topZones: Array.isArray(trendsResult?.topZones) ? trendsResult.topZones : [],
+  };
 
   // Compute zone hits from real evidence data
   const zoneHits: Record<string, number> = {};
@@ -159,7 +167,7 @@ export default function VehicleIntelligencePage() {
           <ScrollArea className="flex-1 px-3">
             <div className="space-y-1 pb-4">
               {filtered.map((v: any) => (
-                <button key={v.id} onClick={() => { setSelectedVehicle(v); setSelectedZone(null); }}
+                <button key={v.id} onClick={() => { setSelectedVehicleId(v.id); setSelectedZone(null); }}
                   className={`w-full text-left p-3 rounded-lg transition-colors ${selectedVehicle?.id === v.id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/50'}`}
                   data-testid={`vehicle-item-${v.id}`}>
                   <div className="flex items-center justify-between">
@@ -486,7 +494,7 @@ function TelematicsPanel({ vehicleId }: { vehicleId: number }) {
     }>;
   }>({
     queryKey: ["/api/telematics/vehicles", vehicleId, "summary"],
-    queryFn: () => fetch(`/api/telematics/vehicles/${vehicleId}/summary`, { credentials: "include" }).then(r => r.json()),
+    queryFn: () => apiRequest("GET", `/api/telematics/vehicles/${vehicleId}/summary`).then(r => r.json()),
     enabled: !!vehicleId,
   });
 

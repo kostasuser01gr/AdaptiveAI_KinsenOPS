@@ -1,16 +1,21 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "http";
-import { randomUUID, createHmac } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { logger } from "./observability/logger.js";
 import { metricsCollector } from "./observability/metrics.js";
 import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage.js";
+import { config } from "./config.js";
+import {
+  buildWebSocketClientMessage,
+  getWebSocketSubscriptionPolicy,
+  parseMemberChannelId,
+} from "./websocketPolicy.js";
 
-const PUBLIC_CHANNELS = new Set(['vehicles', 'wash-queue', 'activity', 'notifications']);
-
-// Channel patterns that require authentication (regex match)
-const _AUTH_CHANNEL_PREFIXES = ['channel:'];
+const MAX_SUBSCRIPTIONS_PER_CLIENT = 100;
+const WS_MSG_RATE_WINDOW_MS = 10_000;
+const WS_MSG_RATE_MAX = 50; // 50 messages per 10 seconds
 
 interface ClientConnection {
   ws: WebSocket;
@@ -20,6 +25,7 @@ interface ClientConnection {
   subscriptions: Set<string>;
   authenticated: boolean;
   isAlive: boolean;
+  msgTimestamps: number[];
 }
 
 function parseCookies(header: string): Record<string, string> {
@@ -46,7 +52,12 @@ function unsignSessionCookie(cookieValue: string, secret: string): string | null
     .update(sessionId)
     .digest('base64')
     .replace(/=+$/, '');
-  if (expected !== signature) return null;
+  if (expected.length !== signature.length) return null;
+  const isValid = timingSafeEqual(
+    Buffer.from(expected, 'utf8'),
+    Buffer.from(signature, 'utf8'),
+  );
+  if (!isValid) return null;
   return sessionId;
 }
 
@@ -56,9 +67,27 @@ class WebSocketManager {
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
   initialize(httpServer: Server): void {
+    // CC-3: Derive allowed origins for WebSocket verifyClient
+    const allowedWsOrigins = new Set<string>(config.corsOrigins);
+
     this.wss = new WebSocketServer({
       server: httpServer,
       path: '/ws',
+      maxPayload: 64 * 1024, // 64 KB limit
+      verifyClient: (info, cb) => {
+        // In dev, allow all origins; in production, enforce CORS_ORIGIN
+        if (!config.isProduction) {
+          cb(true);
+          return;
+        }
+        const origin = info.origin || info.req.headers.origin;
+        if (!origin || allowedWsOrigins.size === 0 || allowedWsOrigins.has(origin)) {
+          cb(true);
+        } else {
+          logger.warn('WebSocket connection rejected — invalid origin', { origin });
+          cb(false, 403, 'Forbidden');
+        }
+      },
     });
 
     this.wss.on('connection', async (ws: WebSocket, req: IncomingMessage) => {
@@ -68,6 +97,7 @@ class WebSocketManager {
         subscriptions: new Set(),
         authenticated: false,
         isAlive: true,
+        msgTimestamps: [],
       };
 
       this.clients.set(clientId, client);
@@ -83,6 +113,17 @@ class WebSocketManager {
 
       ws.on('message', (data: Buffer) => {
         try {
+          // CC-6: Rate-limit incoming messages per client
+          const now = Date.now();
+          const c = this.clients.get(clientId);
+          if (c) {
+            c.msgTimestamps = c.msgTimestamps.filter(t => t > now - WS_MSG_RATE_WINDOW_MS);
+            if (c.msgTimestamps.length >= WS_MSG_RATE_MAX) {
+              c.ws.send(JSON.stringify({ type: 'error', message: 'Rate limit exceeded' }));
+              return;
+            }
+            c.msgTimestamps.push(now);
+          }
           const message = JSON.parse(data.toString());
           this.handleMessage(clientId, message);
         } catch (error) {
@@ -131,8 +172,9 @@ class WebSocketManager {
   }
 
   private async resolveSession(req: IncomingMessage, client: ClientConnection, clientId: string): Promise<void> {
-    const secret = process.env.SESSION_SECRET;
-    if (!secret) return;
+    const secret = config.sessionSecret;
+    // eslint-disable-next-line security/detect-possible-timing-attacks
+    if (secret === "dev-secret-not-for-production") return;
 
     const cookieHeader = req.headers.cookie || '';
     const cookies = parseCookies(cookieHeader);
@@ -158,6 +200,12 @@ class WebSocketManager {
 
       client.userId = user.id;
       client.role = user.role;
+      if (user.station) {
+        const stationId = Number.parseInt(user.station, 10);
+        if (Number.isFinite(stationId)) {
+          client.stationId = stationId;
+        }
+      }
       client.authenticated = true;
     } catch (err) {
       logger.error('Failed to resolve WebSocket session', err as Error, { clientId });
@@ -173,25 +221,55 @@ class WebSocketManager {
         const channel = message.channel as string;
         if (!channel) break;
 
-        // Unauthenticated sockets can only subscribe to public channels
-        if (!PUBLIC_CHANNELS.has(channel)) {
-          if (!client.authenticated) {
-            client.ws.send(JSON.stringify({ type: 'error', message: 'Authentication required for this channel' }));
+        const policy = getWebSocketSubscriptionPolicy(channel);
+
+        // CC-5: Limit subscriptions per client to prevent memory exhaustion
+        if (client.subscriptions.size >= MAX_SUBSCRIPTIONS_PER_CLIENT && !client.subscriptions.has(channel)) {
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Subscription limit reached' }));
+          break;
+        }
+
+        if (policy === 'forbidden') {
+          logger.warn('WebSocket subscription rejected — unknown or restricted channel', {
+            clientId,
+            channel,
+            authenticated: client.authenticated,
+            userId: client.userId,
+          });
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Unknown or restricted channel' }));
+          break;
+        }
+
+        if (policy !== 'anonymous' && !client.authenticated) {
+          logger.warn('WebSocket subscription rejected — authentication required', {
+            clientId,
+            channel,
+          });
+          client.ws.send(JSON.stringify({ type: 'error', message: 'Authentication required for this channel' }));
+          break;
+        }
+
+        if (policy === 'member') {
+          const memberChannelId = parseMemberChannelId(channel);
+          if (memberChannelId === null) {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Invalid channel id' }));
             break;
           }
-          // For channel-scoped subscriptions, verify membership
-          const chMatch = channel.match(/^channel:(\d+)$/);
-          if (chMatch) {
-            try {
-              const members = await storage.getChannelMembers(Number(chMatch[1]));
-              if (!members.some((m: any) => m.userId === client.userId)) {
-                client.ws.send(JSON.stringify({ type: 'error', message: 'Not a member of this channel' }));
-                break;
-              }
-            } catch {
-              client.ws.send(JSON.stringify({ type: 'error', message: 'Failed to verify membership' }));
+
+          try {
+            const members = await storage.getChannelMembers(memberChannelId);
+            if (!members.some((m: any) => m.userId === client.userId)) {
+              logger.warn('WebSocket subscription rejected — channel membership required', {
+                clientId,
+                channel,
+                userId: client.userId,
+              });
+              client.ws.send(JSON.stringify({ type: 'error', message: 'Not a member of this channel' }));
               break;
             }
+          } catch {
+            client.ws.send(JSON.stringify({ type: 'error', message: 'Failed to verify membership' }));
+            break;
           }
         }
 
@@ -204,10 +282,14 @@ class WebSocketManager {
         // Relay typing indicators for chat channels
         const typingChannel = message.channel as string;
         if (!typingChannel || !client.authenticated) break;
+        if (parseMemberChannelId(typingChannel) === null) break;
+        // CC-8: Only allow typing in channels the client is subscribed to
+        if (!client.subscriptions.has(typingChannel)) break;
+        // CC-7: Use server-side userId — frontend derives displayName from user data
         this.broadcast({
           type: 'typing',
           channel: typingChannel,
-          data: { userId: client.userId, displayName: message.displayName },
+          data: { userId: client.userId },
         });
         break;
       }
@@ -245,18 +327,24 @@ class WebSocketManager {
     data: unknown;
     stationId?: number;
   }): void {
-    const message = JSON.stringify({
+    const message = JSON.stringify(buildWebSocketClientMessage({
       type: event.type,
+      channel: event.channel,
       data: event.data,
-      timestamp: new Date().toISOString(),
-    });
+    }));
 
     let sentCount = 0;
 
     for (const [clientId, client] of Array.from(this.clients.entries())) {
       if (client.ws.readyState !== WebSocket.OPEN) continue;
 
-      if (event.channel && !client.subscriptions.has(event.channel)) continue;
+      // If a channel is specified, only send to clients subscribed to that channel.
+      // If no channel is specified, only send to authenticated clients (prevent data leaks).
+      if (event.channel) {
+        if (!client.subscriptions.has(event.channel)) continue;
+      } else {
+        if (!client.authenticated) continue;
+      }
 
       if (event.stationId && client.stationId && client.stationId !== event.stationId) continue;
 

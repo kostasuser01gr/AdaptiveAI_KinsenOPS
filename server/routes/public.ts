@@ -58,6 +58,10 @@ export function registerPublicRoutes(app: Express) {
       if (!room || !isPublicRoomType(room.entityType)) {
         return res.status(404).json({ message: "Not found" });
       }
+      // PUB-1: Require entityId proof to prevent IDOR on sequential room IDs
+      if (req.query.entityId !== room.entityId) {
+        return res.status(404).json({ message: "Not found" });
+      }
       res.json(await storage.getRoomMessages(Number(req.params.id)));
     } catch (e) { next(e); }
   });
@@ -66,6 +70,10 @@ export function registerPublicRoutes(app: Express) {
     try {
       const room = await storage.getEntityRoom(Number(req.params.id));
       if (!room || !isPublicRoomType(room.entityType)) {
+        return res.status(404).json({ message: "Not found" });
+      }
+      // PUB-1: Require entityId proof to prevent IDOR on sequential room IDs
+      if (req.query.entityId !== room.entityId) {
         return res.status(404).json({ message: "Not found" });
       }
       const { content } = z.object({

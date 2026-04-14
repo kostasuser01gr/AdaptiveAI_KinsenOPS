@@ -83,6 +83,24 @@ export function registerReservationRoutes(app: Express) {
         }
       }
 
+      // Double-booking check when vehicle or dates change
+      const effectiveVehicleId = parsed.vehicleId ?? existing.vehicleId;
+      const effectivePickup = parsed.pickupDate ? new Date(parsed.pickupDate) : new Date(existing.pickupDate);
+      const effectiveReturn = parsed.returnDate ? new Date(parsed.returnDate) : new Date(existing.returnDate);
+      if (effectiveVehicleId && (parsed.vehicleId || parsed.pickupDate || parsed.returnDate)) {
+        const others = await storage.getReservations({ vehicleId: effectiveVehicleId });
+        const overlap = (others || []).filter((r: any) => {
+          if (r.id === id || r.status === 'cancelled' || r.status === 'no_show') return false;
+          return new Date(r.pickupDate) < effectiveReturn && effectivePickup < new Date(r.returnDate);
+        });
+        if (overlap.length > 0) {
+          return res.status(409).json({
+            message: "Vehicle has overlapping reservation(s)",
+            conflicting: overlap.map((r: any) => ({ id: r.id, pickupDate: r.pickupDate, returnDate: r.returnDate })),
+          });
+        }
+      }
+
       const updated = await storage.updateReservation(id, data as any);
       if (!updated) return res.status(404).json({ message: "Not found" });
       res.json(updated);

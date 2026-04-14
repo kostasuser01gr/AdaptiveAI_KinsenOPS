@@ -87,13 +87,16 @@ run_named_gate() {
       run_shell_gate "G6" "Coverage" "npx vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=lcov"
       ;;
     G8)
-      run_shell_gate "G8" "Dependency audit" "npm audit --omit=dev --audit-level=high"
+      run_shell_gate "G8" "Dependency audit" "npm audit --omit=dev --audit-level=moderate"
       ;;
     G9)
       run_shell_gate "G9" "SAST heuristic scan" "if rg -n --glob '!client/src/components/ui/**' '(eval\\(|new Function\\(|dangerouslySetInnerHTML|child_process\\.(exec|spawn)|execSync\\()' server client/src shared api; then echo 'Potentially unsafe constructs found'; exit 1; fi"
       ;;
     G10)
       run_shell_gate "G10" "Secret scan" "if command -v gitleaks >/dev/null 2>&1; then gitleaks detect --no-banner --redact --source .; else if rg -n --hidden --glob '!.git/**' --glob '!node_modules/**' --glob '!dist/**' --glob '!coverage/**' '(-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|sk_live_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16})' .; then echo 'Potential secrets found'; exit 1; fi; echo 'No supported secret scanner installed; heuristic scan passed'; fi"
+      ;;
+    G11)
+      run_shell_gate "G11" "Migration ordering" "zsh scripts/ci/validate-migrations.sh"
       ;;
     *)
       echo "Unsupported gate: $1" >&2
@@ -131,7 +134,7 @@ TARGET="${1:-all}"
 
 if [ "$TARGET" = "all" ]; then
   failed=0
-  for gate in G1 G2 G3 G4 G5 G6 G8 G9 G10; do
+  for gate in G1 G2 G3 G4 G5 G6 G8 G9 G10 G11; do
     if ! run_named_gate "$gate"; then
       failed=1
     fi

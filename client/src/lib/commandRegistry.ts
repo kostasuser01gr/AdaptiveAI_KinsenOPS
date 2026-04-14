@@ -91,15 +91,10 @@ export function getCustomActionCommands(
 }
 
 // ─── ROLE HIERARCHY ───
-const ROLE_HIERARCHY: Record<string, number> = {
-  admin: 4,
-  supervisor: 3,
-  coordinator: 2,
-  agent: 1,
-};
+import { isRoleAtLeast } from "../../../shared/roles";
 
 function isRoleAllowed(userRole: string, requiredRole: string): boolean {
-  return (ROLE_HIERARCHY[userRole] || 0) >= (ROLE_HIERARCHY[requiredRole] || 0);
+  return isRoleAtLeast(userRole, requiredRole);
 }
 
 // ─── FILTER COMMANDS ───

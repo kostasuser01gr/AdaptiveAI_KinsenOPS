@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Brain, BookOpen, Settings, Lightbulb, Database, Shield, Plus, Search, AlertTriangle, FileText, MessageSquare, Sparkles } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { MotionDialog } from '@/components/motion/MotionDialog';
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -33,6 +33,7 @@ export default function WorkspaceMemoryPage() {
   const createMutation = useMutation({
     mutationFn: async (data: any) => { await apiRequest("POST", "/api/workspace-memory", data); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/workspace-memory"] }); setShowCreate(false); setNewKey(''); setNewVal(''); toast({ title: "Memory saved" }); },
+    onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
 
   const categories = ['policy', 'sop', 'preference', 'threshold', 'integration', 'philosophy'];
@@ -73,15 +74,9 @@ export default function WorkspaceMemoryPage() {
           <p className="text-sm text-muted-foreground">Organizational genome, SOPs, AI learning, ask-document mode, and stale detection</p>
         </div>
         {canWrite && (
-          <Dialog open={showCreate} onOpenChange={setShowCreate}>
-            <DialogTrigger asChild>
-              <Button className="gap-2" data-testid="button-add-memory"><Plus className="h-4 w-4" /> Add Memory</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Workspace Memory</DialogTitle>
-                <DialogDescription>Teach the AI a new organizational rule, preference, or operational pattern.</DialogDescription>
-              </DialogHeader>
+          <>
+            <Button className="gap-2" data-testid="button-add-memory" onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> Add Memory</Button>
+            <MotionDialog open={showCreate} onOpenChange={setShowCreate} title="Add Workspace Memory" description="Teach the AI a new organizational rule, preference, or operational pattern.">
               <div className="space-y-4 mt-4">
                 <Select value={newCat} onValueChange={setNewCat}>
                   <SelectTrigger data-testid="select-memory-category"><SelectValue /></SelectTrigger>
@@ -91,13 +86,13 @@ export default function WorkspaceMemoryPage() {
                 </Select>
                 <Input placeholder="Key (e.g., max_shift_hours)..." value={newKey} onChange={e => setNewKey(e.target.value)} data-testid="input-memory-key" />
                 <Textarea placeholder="Value (e.g., 10 hours maximum per shift)..." value={newVal} onChange={e => setNewVal(e.target.value)} data-testid="input-memory-value" />
-                <Button className="w-full" disabled={!newKey.trim() || !newVal.trim()} data-testid="button-save-memory"
+                <Button className="w-full" disabled={!newKey.trim() || !newVal.trim() || createMutation.isPending} data-testid="button-save-memory"
                   onClick={() => createMutation.mutate({ category: newCat, key: newKey, value: newVal, source: 'admin', confidence: 1.0 })}>
                   Save to Memory
                 </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+            </MotionDialog>
+          </>
         )}
       </div>
 

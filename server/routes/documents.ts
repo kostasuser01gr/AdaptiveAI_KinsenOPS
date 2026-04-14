@@ -51,7 +51,7 @@ export function registerDocumentRoutes(app: Express) {
       if (!entityType || !entityId || !filename || !mimeType) {
         return res.status(400).json({ message: "entityType, entityId, filename, mimeType required" });
       }
-      const validation = validateUpload(mimeType, size || 0);
+      const validation = await validateUpload(mimeType, size || 0);
       if (!validation.valid) return res.status(400).json({ message: validation.error });
       const target = await documentStorage.generateUploadTarget(entityType, entityId, filename, mimeType);
       res.json(target);

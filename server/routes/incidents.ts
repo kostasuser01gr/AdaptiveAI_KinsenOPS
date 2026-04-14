@@ -1,12 +1,13 @@
 import type { Express } from "express";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireRole } from "../auth.js";
 import { wsManager } from "../websocket.js";
 import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
 import { INCIDENT_TRANSITIONS } from "./_helpers.js";
 import { resolveStationScope } from "../middleware/stationScope.js";
 import { insertIncidentSchema } from "../../shared/schema.js";
+import { withTransaction } from "../db.js";
 
 export function registerIncidentRoutes(app: Express) {
   const incidentPatchSchema = z.object({
@@ -40,32 +41,37 @@ export function registerIncidentRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.post("/api/incidents", requireAuth, auditLog({ action: AUDIT_ACTIONS.CREATE, entityType: 'incident' }), async (req, res, next) => {
+  app.post("/api/incidents", requireRole("admin", "supervisor", "coordinator"), auditLog({ action: AUDIT_ACTIONS.CREATE, entityType: 'incident' }), async (req, res, next) => {
     try {
       const user = req.user as Express.User;
       const data = insertIncidentSchema.parse({ ...req.body, reportedBy: user.id });
-      const incident = await storage.createIncident(data);
 
-      if (incident.severity === 'high' || incident.severity === 'critical') {
-        const room = await storage.createEntityRoom({
-          entityType: 'incident', entityId: String(incident.id),
-          title: `[INC-${incident.id}] ${incident.title}`,
-          status: 'open',
-          priority: incident.severity === 'critical' ? 'critical' : 'high',
-          metadata: { incidentId: incident.id, category: incident.category },
-        });
-        await storage.updateIncident(incident.id, { roomId: room.id });
-        incident.roomId = room.id;
-        await storage.createRoomMessage({
-          roomId: room.id, userId: user.id, role: 'system',
-          content: `Incident created: ${incident.title}\nSeverity: ${incident.severity}\nCategory: ${incident.category}${incident.description ? `\n\n${incident.description}` : ''}`,
-          type: 'system',
-        });
-      }
+      const incident = await withTransaction(async () => {
+        const incident = await storage.createIncident(data);
 
-      await storage.createActivityEntry({
-        userId: user.id, actorName: user.displayName, action: 'incident_created',
-        entityType: 'incident', entityId: String(incident.id), entityLabel: incident.title, stationId: incident.stationId,
+        if (incident.severity === 'high' || incident.severity === 'critical') {
+          const room = await storage.createEntityRoom({
+            entityType: 'incident', entityId: String(incident.id),
+            title: `[INC-${incident.id}] ${incident.title}`,
+            status: 'open',
+            priority: incident.severity === 'critical' ? 'critical' : 'high',
+            metadata: { incidentId: incident.id, category: incident.category },
+          });
+          await storage.updateIncident(incident.id, { roomId: room.id });
+          incident.roomId = room.id;
+          await storage.createRoomMessage({
+            roomId: room.id, userId: user.id, role: 'system',
+            content: `Incident created: ${incident.title}\nSeverity: ${incident.severity}\nCategory: ${incident.category}${incident.description ? `\n\n${incident.description}` : ''}`,
+            type: 'system',
+          });
+        }
+
+        await storage.createActivityEntry({
+          userId: user.id, actorName: user.displayName, action: 'incident_created',
+          entityType: 'incident', entityId: String(incident.id), entityLabel: incident.title, stationId: incident.stationId,
+        });
+
+        return incident;
       });
 
       wsManager.broadcast({ type: 'incident:created', data: incident, channel: 'notifications' });
@@ -73,7 +79,7 @@ export function registerIncidentRoutes(app: Express) {
     } catch (e) { next(e); }
   });
 
-  app.patch("/api/incidents/:id", requireAuth, auditLog({ action: AUDIT_ACTIONS.UPDATE, entityType: 'incident' }), async (req, res, next) => {
+  app.patch("/api/incidents/:id", requireRole("admin", "supervisor", "coordinator"), auditLog({ action: AUDIT_ACTIONS.UPDATE, entityType: 'incident' }), async (req, res, next) => {
     try {
       const user = req.user as Express.User;
       const id = Number(req.params.id);
@@ -125,12 +131,17 @@ export function registerIncidentRoutes(app: Express) {
   });
 
   // Escalate incident
-  app.post("/api/incidents/:id/escalate", requireAuth, async (req, res, next) => {
+  app.post("/api/incidents/:id/escalate", requireRole("admin", "supervisor", "coordinator"), async (req, res, next) => {
     try {
       const user = req.user as Express.User;
       const id = Number(req.params.id);
       const incident = await storage.getIncident(id);
       if (!incident) return res.status(404).json({ message: "Not found" });
+
+      // INC-2: Prevent escalation of closed/resolved incidents
+      if (incident.status === 'closed' || incident.status === 'resolved') {
+        return res.status(409).json({ message: `Cannot escalate ${incident.status} incident` });
+      }
 
       const severityLadder = ['low', 'medium', 'high', 'critical'];
       const currentIdx = severityLadder.indexOf(incident.severity);

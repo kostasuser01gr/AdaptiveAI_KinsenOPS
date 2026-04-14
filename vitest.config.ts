@@ -7,6 +7,13 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./tests/setup.ts"],
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
+    coverage: {
+      provider: "v8",
+      thresholds: {
+        lines: 80,
+        branches: 70,
+      },
+    },
   },
   define: {
     "import.meta.env.DEV": false,

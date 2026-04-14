@@ -1,12 +1,14 @@
-import { db, eq, desc, isNull , wsFilter, wsInsert, and} from "./base.js";
+import { db, eq, desc, isNull , wsFilter, wsInsert, and, inArray} from "./base.js";
 import {
   vehicles, type InsertVehicle,
   vehicleEvidence, type InsertVehicleEvidence,
 } from "../../shared/schema.js";
 
 export class VehicleStorage {
-  async getVehicles() {
-    return db.select().from(vehicles).where(and(isNull(vehicles.deletedAt), wsFilter(vehicles)));
+  async getVehicles(filters?: { stationIds?: number[] }) {
+    const conditions = [isNull(vehicles.deletedAt), wsFilter(vehicles)];
+    if (filters?.stationIds?.length) conditions.push(inArray(vehicles.stationId, filters.stationIds));
+    return db.select().from(vehicles).where(and(...conditions));
   }
   async getVehicle(id: number) {
     const [v] = await db.select().from(vehicles).where(and(eq(vehicles.id, id), wsFilter(vehicles)));

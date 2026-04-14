@@ -36,15 +36,23 @@ export function registerAnalyticsRoutes(app: Express) {
       const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 90);
       const trends = await storage.getAnalyticsTrends(days);
       const summary = await storage.getAnalyticsSummary();
+      // RT-12: CSV-safe escaping to prevent formula injection
+      const csvSafe = (val: unknown): string => {
+        const s = String(val ?? '');
+        if (/^[=+\-@\t\r]/.test(s) || s.includes('"') || s.includes(',') || s.includes('\n')) {
+          return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      };
       const csvRows = ['date,washes,evidence,notifications'];
-      for (const t of trends) csvRows.push(`${t.date},${t.washes},${t.evidence},${t.notifications}`);
+      for (const t of trends) csvRows.push([t.date, t.washes, t.evidence, t.notifications].map(csvSafe).join(','));
       csvRows.push('');
       csvRows.push('metric,value');
       for (const [k, v] of Object.entries(summary)) {
         if (typeof v === 'object' && v !== null) {
-          for (const [sk, sv] of Object.entries(v as Record<string, unknown>)) csvRows.push(`${k}.${sk},${sv}`);
+          for (const [sk, sv] of Object.entries(v as Record<string, unknown>)) csvRows.push(`${csvSafe(`${k}.${sk}`)},${csvSafe(sv)}`);
         } else {
-          csvRows.push(`${k},${v}`);
+          csvRows.push(`${csvSafe(k)},${csvSafe(v)}`);
         }
       }
       res.setHeader('Content-Type', 'text/csv');

@@ -7,6 +7,7 @@
 
 import { storage } from "../storage.js";
 import { logger } from "../observability/logger.js";
+import { configResolver } from "../config/resolver.js";
 import type { TaskDefinition } from "./types.js";
 
 export const anomalyDetectionTask: TaskDefinition = {
@@ -23,10 +24,18 @@ export const anomalyDetectionTask: TaskDefinition = {
     let detectedCount = 0;
     const existingOpen = await storage.getAnomalies({ status: "open" });
 
-    // 1. Wash stagnation — pending items > 4 hours, 3+
+    // Load configurable thresholds
+    const [lookbackDays, spikeWindowMs, washStagnationHours, notifSpikeThreshold] = await Promise.all([
+      configResolver.getNumber("operational.anomaly_lookback_days"),
+      configResolver.getNumber("operational.anomaly_recent_window_minutes").then(m => m * 60_000),
+      configResolver.getNumber("operational.wash_stagnation_hours"),
+      configResolver.getNumber("operational.notification_spike_threshold"),
+    ]);
+
+    // 1. Wash stagnation — pending items > configured hours, 3+
     const washItems = await storage.getWashQueue();
     const stagnant = washItems.filter(
-      (w) => w.status === "pending" && Date.now() - new Date(w.createdAt).getTime() > 4 * 3_600_000,
+      (w) => w.status === "pending" && Date.now() - new Date(w.createdAt).getTime() > washStagnationHours * 3_600_000,
     );
     if (stagnant.length >= 3) {
       const alreadyExists = existingOpen.some((a) => a.type === "wash_stagnation");
@@ -52,19 +61,19 @@ export const anomalyDetectionTask: TaskDefinition = {
       }
     }
 
-    // 2. Repeated damage — 3+ evidence items in 7 days
+    // 2. Repeated damage — 3+ evidence items in lookback window
     const allVehicles = await storage.getVehicles();
-    const sevenDaysAgo = Date.now() - 7 * 86_400_000;
+    const lookbackCutoff = Date.now() - lookbackDays * 86_400_000;
     for (const v of allVehicles.slice(0, 200)) {
       const alreadyExists = existingOpen.some((a) => a.type === "repeated_damage" && a.entityId === String(v.id));
       if (alreadyExists) continue;
       const evidence = await storage.getVehicleEvidence(v.id);
-      const recent = evidence.filter((e) => new Date(e.createdAt).getTime() > sevenDaysAgo);
+      const recent = evidence.filter((e) => new Date(e.createdAt).getTime() > lookbackCutoff);
       if (recent.length >= 3) {
         await storage.createAnomaly({
           type: "repeated_damage",
           severity: recent.length >= 5 ? "critical" : "warning",
-          title: `Vehicle ${v.plate} has ${recent.length} evidence items in 7 days`,
+          title: `Vehicle ${v.plate} has ${recent.length} evidence items in ${lookbackDays} days`,
           description: `${recent.length} damage/evidence items logged recently for vehicle ${v.plate} (${v.model})`,
           entityType: "vehicle",
           entityId: String(v.id),
@@ -75,11 +84,11 @@ export const anomalyDetectionTask: TaskDefinition = {
       }
     }
 
-    // 3. Notification spike — >20 in 1 hour
+    // 3. Notification spike — >threshold in configured window
     const allNotifs = await storage.getNotifications(0, "admin");
-    const oneHourAgo = Date.now() - 3_600_000;
-    const recentNotifs = allNotifs.filter((n) => new Date(n.createdAt).getTime() > oneHourAgo);
-    if (recentNotifs.length > 20) {
+    const windowCutoff = Date.now() - spikeWindowMs;
+    const recentNotifs = allNotifs.filter((n) => new Date(n.createdAt).getTime() > windowCutoff);
+    if (recentNotifs.length > notifSpikeThreshold) {
       const alreadyExists = existingOpen.some((a) => a.type === "notification_spike");
       if (!alreadyExists) {
         await storage.createAnomaly({

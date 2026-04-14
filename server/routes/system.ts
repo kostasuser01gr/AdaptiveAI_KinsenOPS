@@ -1,14 +1,37 @@
 import type { Express } from "express";
 import { storage } from "../storage.js";
-import { pool } from "../db.js";
+import { pool, aiPool } from "../db.js";
 import { requireAuth, requireRole } from "../auth.js";
 import { searchLimiter } from "../middleware/rate-limiter.js";
 import { metricsCollector } from "../observability/metrics.js";
 import { wsManager } from "../websocket.js";
 import { resolveStationScope } from "../middleware/stationScope.js";
 import { taskRunner } from "../tasks/index.js";
+import { redis } from "../redis.js";
+import { getAllFeatureFlags, setFeatureFlag, clearFeatureFlag, type FeatureFlagName, getFeatureFlagNames } from "../featureFlags.js";
+import { getAllBreakerStats } from "../circuitBreaker.js";
+import { logger } from "../observability/logger.js";
+import { apiLimiter } from "../middleware/rate-limiter.js";
 
 export function registerSystemRoutes(app: Express) {
+  // ─── Client error reporting ─────────────────────────────────────────────
+  app.post("/api/client-errors", apiLimiter, (req, res) => {
+    const { message, stack, componentStack, url, userAgent } = req.body ?? {};
+    if (typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ ok: false, message: "message is required" });
+    }
+    logger.error("Client error", undefined, {
+      clientError: true,
+      message: String(message).slice(0, 1000),
+      stack: typeof stack === "string" ? stack.slice(0, 4000) : undefined,
+      componentStack: typeof componentStack === "string" ? componentStack.slice(0, 4000) : undefined,
+      url: typeof url === "string" ? url.slice(0, 500) : undefined,
+      userAgent: typeof userAgent === "string" ? userAgent.slice(0, 300) : undefined,
+      userId: (req.user as any)?.id ?? null,
+    });
+    res.json({ ok: true });
+  });
+
   // COMMAND PALETTE SEARCH
   app.get("/api/command-palette/search", requireAuth, searchLimiter, async (req, res, next) => {
     try {
@@ -24,35 +47,28 @@ export function registerSystemRoutes(app: Express) {
         return res.json({ results: [], quickActions: [], totalMatches: 0 });
       }
 
-      const allVehicles = await storage.getVehicles();
+      const allVehicles = await storage.getVehicles(paletteScope !== null ? { stationIds: paletteScope } : undefined);
       for (const v of allVehicles) {
-        if (paletteScope !== null && v.stationId !== null && !paletteScope.includes(v.stationId as number)) continue;
         if (v.plate.toLowerCase().includes(qLower) || v.model.toLowerCase().includes(qLower)) {
           results.push({ type: 'vehicle', id: v.id, label: v.plate, description: `${v.model} — ${v.status}`, route: `/fleet`, icon: 'Car' });
         }
       }
 
-      const allIncidents = paletteScope === null
-        ? await storage.getIncidents()
-        : (await storage.getIncidents()).filter(i => i.stationId !== null && paletteScope.includes(i.stationId));
+      const allIncidents = await storage.getIncidents(paletteScope !== null ? { stationIds: paletteScope } : undefined);
       for (const i of allIncidents) {
         if (i.title.toLowerCase().includes(qLower) || `inc-${i.id}`.includes(qLower)) {
           results.push({ type: 'incident', id: i.id, label: `INC-${i.id}: ${i.title}`, description: `${i.severity} — ${i.status}`, route: `/war-room`, icon: 'AlertTriangle' });
         }
       }
 
-      const allReservations = paletteScope === null
-        ? await storage.getReservations()
-        : (await storage.getReservations()).filter(r => r.stationId !== null && paletteScope.includes(r.stationId));
+      const allReservations = await storage.getReservations(paletteScope !== null ? { stationIds: paletteScope } : undefined);
       for (const r of allReservations) {
         if (r.customerName.toLowerCase().includes(qLower) || (r.customerEmail && r.customerEmail.toLowerCase().includes(qLower))) {
           results.push({ type: 'reservation', id: r.id, label: `Reservation #${r.id}: ${r.customerName}`, description: r.status, route: `/calendar`, icon: 'CalendarDays' });
         }
       }
 
-      const allRepairOrders = paletteScope === null
-        ? await storage.getRepairOrders()
-        : (await storage.getRepairOrders()).filter(ro => ro.stationId !== null && paletteScope.includes(ro.stationId));
+      const allRepairOrders = await storage.getRepairOrders(paletteScope !== null ? { stationIds: paletteScope } : undefined);
       for (const ro of allRepairOrders) {
         if (ro.title.toLowerCase().includes(qLower) || `ro-${ro.id}`.includes(qLower)) {
           results.push({ type: 'repair_order', id: ro.id, label: `RO-${ro.id}: ${ro.title}`, description: `${ro.priority} — ${ro.status}`, route: `/fleet`, icon: 'Wrench' });
@@ -120,7 +136,17 @@ export function registerSystemRoutes(app: Express) {
       try { await client.query("SELECT 1"); dbOk = true; } finally { client.release(); }
     } catch { /* db unreachable */ }
 
-    const status = dbOk ? (metrics.errorRate > 50 ? 'degraded' : 'operational') : 'degraded';
+    let redisOk = false;
+    try {
+      if (redis) { await redis.ping(); redisOk = true; }
+      else { redisOk = true; } // Redis is optional
+    } catch { /* redis unreachable */ }
+
+    const taskStates = taskRunner.getStates();
+    const failingTasks = taskStates.filter((t: any) => t.enabled && t.errorCount > t.runCount * 0.5 && t.runCount > 0);
+
+    const allOk = dbOk && redisOk && failingTasks.length === 0;
+    const status = !dbOk ? 'degraded' : !allOk ? 'degraded' : metrics.errorRate > 50 ? 'degraded' : 'operational';
 
     res.json({
       status,
@@ -132,7 +158,21 @@ export function registerSystemRoutes(app: Express) {
       },
       checks: {
         database: dbOk ? "connected" : "unreachable",
+        redis: redisOk ? "connected" : "unreachable",
         websocket: wsStats.totalClients >= 0 ? "running" : "unknown",
+        tasks: failingTasks.length === 0 ? "healthy" : `${failingTasks.length} failing`,
+      },
+      pools: {
+        main: {
+          total: pool.totalCount,
+          idle: pool.idleCount,
+          waiting: pool.waitingCount,
+        },
+        ai: {
+          total: aiPool.totalCount,
+          idle: aiPool.idleCount,
+          waiting: aiPool.waitingCount,
+        },
       },
       metrics: {
         totalRequests: metrics.totalRequests,
@@ -142,11 +182,12 @@ export function registerSystemRoutes(app: Express) {
       websocket: {
         totalClients: wsStats.totalClients,
         authenticatedClients: wsStats.authenticatedClients,
+        subscriptions: wsStats.subscriptions,
       },
       version: '2.0.0',
       modules: 14,
       week1: metricsCollector.getWeek1Counters(),
-      tasks: taskRunner.getStates(),
+      tasks: taskStates,
       timestamp: new Date().toISOString(),
     });
   });
@@ -176,5 +217,40 @@ export function registerSystemRoutes(app: Express) {
   // TASK RUNNER — list all task states
   app.get("/api/tasks", requireRole("admin", "supervisor"), async (_req, res) => {
     res.json(taskRunner.getStates());
+  });
+
+  // FEATURE FLAGS — read (any authenticated user)
+  app.get("/api/feature-flags", requireAuth, async (_req, res) => {
+    res.json(getAllFeatureFlags());
+  });
+
+  // FEATURE FLAGS — toggle (admin only)
+  app.post("/api/admin/feature-flags", requireRole("admin"), async (req, res) => {
+    const { flag, enabled } = req.body as { flag: string; enabled: boolean };
+    const validNames = getFeatureFlagNames();
+    if (!validNames.includes(flag as FeatureFlagName)) {
+      return res.status(400).json({ message: `Unknown flag: ${flag}` });
+    }
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ message: "enabled must be a boolean" });
+    }
+    setFeatureFlag(flag as FeatureFlagName, enabled);
+    res.json({ flag, enabled, message: "Flag updated" });
+  });
+
+  // FEATURE FLAGS — reset to default (admin only)
+  app.delete("/api/admin/feature-flags/:flag", requireRole("admin"), async (req, res) => {
+    const flag = req.params.flag;
+    const validNames = getFeatureFlagNames();
+    if (!validNames.includes(flag as FeatureFlagName)) {
+      return res.status(400).json({ message: `Unknown flag: ${flag}` });
+    }
+    clearFeatureFlag(flag as FeatureFlagName);
+    res.json({ flag, message: "Reset to default" });
+  });
+
+  // CIRCUIT BREAKER STATUS
+  app.get("/api/admin/circuit-breakers", requireRole("admin", "supervisor"), async (_req, res) => {
+    res.json(getAllBreakerStats());
   });
 }

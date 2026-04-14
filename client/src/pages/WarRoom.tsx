@@ -8,12 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { MessageSquare, Users, Car, Clock, AlertTriangle, Send, Bot, Plus, Shield, Eye, CheckSquare, FileText, ArrowRight, ListTodo, Bell, Bookmark } from 'lucide-react';
 import { useAuth } from "@/lib/useAuth";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import { MotionDialog } from "@/components/motion";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function WarRoomPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { toast } = useToast();
   const { data: rooms } = useQuery({ queryKey: ["/api/entity-rooms"] });
   const allRooms = Array.isArray(rooms) ? rooms : [];
   const [selectedRoom, setSelectedRoom] = React.useState<number | null>(null);
@@ -26,13 +28,13 @@ export default function WarRoomPage() {
 
   const { data: messages } = useQuery({
     queryKey: ["/api/entity-rooms", selectedRoom, "messages"],
-    queryFn: async () => { const res = await fetch(`/api/entity-rooms/${selectedRoom}/messages`, { credentials: 'include' }); return res.json(); },
     enabled: !!selectedRoom,
   });
 
   const sendMutation = useMutation({
     mutationFn: async (content: string) => { await apiRequest("POST", `/api/entity-rooms/${selectedRoom}/messages`, { content, role: "user", type: "message" }); },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/entity-rooms", selectedRoom, "messages"] }); setMsgInput(''); },
+    onError: (err: Error) => toast({ title: "Message failed", description: err.message, variant: "destructive" }),
   });
 
   const createRoomMutation = useMutation({
@@ -40,11 +42,13 @@ export default function WarRoomPage() {
       await apiRequest("POST", "/api/entity-rooms", { entityType: newType, entityId: `${newType}-${Date.now()}`, title: newTitle, status: "open", priority: newPriority });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/entity-rooms"] }); setShowCreate(false); setNewTitle(''); },
+    onError: (err: Error) => toast({ title: "Room creation failed", description: err.message, variant: "destructive" }),
   });
 
   const updateRoomMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => { await apiRequest("PATCH", `/api/entity-rooms/${id}`, data); },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/entity-rooms"] }),
+    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
   const allMessages = Array.isArray(messages) ? messages : [];
@@ -54,9 +58,8 @@ export default function WarRoomPage() {
 
   // Fetch linked incident if room is incident-typed
   const linkedIncidentId = currentRoom?.entityType === 'incident' ? currentRoom.entityId : (currentRoom?.metadata as any)?.incidentId;
-  const { data: linkedIncident } = useQuery({
+  const { data: linkedIncident } = useQuery<any>({
     queryKey: ["/api/incidents", linkedIncidentId],
-    queryFn: async () => { const r = await fetch(`/api/incidents/${linkedIncidentId}`, { credentials: 'include' }); return r.json(); },
     enabled: !!linkedIncidentId,
   });
 
@@ -66,6 +69,7 @@ export default function WarRoomPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/incidents"] });
       queryClient.invalidateQueries({ queryKey: ["/api/entity-rooms", selectedRoom, "messages"] });
     },
+    onError: (err: Error) => toast({ title: "Incident update failed", description: err.message, variant: "destructive" }),
   });
 
   const convertToAction = (msg: any) => {
@@ -81,15 +85,8 @@ export default function WarRoomPage() {
           </h1>
           <p className="text-sm text-muted-foreground">Entity rooms, crisis mode, tasks, AI summaries, real-time coordination</p>
         </div>
-        <Dialog open={showCreate} onOpenChange={setShowCreate}>
-          <DialogTrigger asChild>
-            <Button className="gap-2" data-testid="button-create-room"><Plus className="h-4 w-4" /> New Room</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create Collaboration Room</DialogTitle>
-              <DialogDescription>Create a room for any entity — vehicle, shift, incident, or operation.</DialogDescription>
-            </DialogHeader>
+        <Button className="gap-2" onClick={() => setShowCreate(true)} data-testid="button-create-room"><Plus className="h-4 w-4" /> New Room</Button>
+        <MotionDialog open={showCreate} onOpenChange={setShowCreate} title="Create Collaboration Room" description="Create a room for any entity — vehicle, shift, incident, or operation.">
             <div className="space-y-4 mt-4">
               <Input placeholder="Room title..." value={newTitle} onChange={e => setNewTitle(e.target.value)} data-testid="input-room-title" />
               <div className="grid grid-cols-2 gap-3">
@@ -115,8 +112,7 @@ export default function WarRoomPage() {
               </div>
               <Button className="w-full" disabled={!newTitle.trim()} onClick={() => createRoomMutation.mutate()} data-testid="button-save-room">Create Room</Button>
             </div>
-          </DialogContent>
-        </Dialog>
+        </MotionDialog>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -354,9 +350,9 @@ export default function WarRoomPage() {
               <div className="p-3 border-t">
                 <div className="flex gap-2">
                   <Input value={msgInput} onChange={e => setMsgInput(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && msgInput.trim() && sendMutation.mutate(msgInput)}
+                    onKeyDown={e => e.key === 'Enter' && msgInput.trim() && !sendMutation.isPending && sendMutation.mutate(msgInput)}
                     placeholder="Message, ask AI for summary, or convert to action..." className="flex-1 h-9 text-sm" data-testid="input-room-message" />
-                  <Button size="sm" onClick={() => msgInput.trim() && sendMutation.mutate(msgInput)} disabled={!msgInput.trim()} data-testid="button-send-room-message">
+                  <Button size="sm" onClick={() => msgInput.trim() && sendMutation.mutate(msgInput)} disabled={!msgInput.trim() || sendMutation.isPending} data-testid="button-send-room-message">
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>

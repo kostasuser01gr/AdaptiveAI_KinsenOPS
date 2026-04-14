@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
-import { requireAuth } from "../auth.js";
+import { requireAuth, requireRole } from "../auth.js";
 import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
 import { wsManager } from "../websocket.js";
 import { insertChatChannelSchema, insertChannelMessageSchema } from "../../shared/schema.js";
@@ -40,7 +40,7 @@ export function registerChannelRoutes(app: Express) {
       } catch (e) { next(e); }
     });
 
-  app.patch("/api/channels/:id", requireAuth,
+  app.patch("/api/channels/:id", requireRole("admin", "supervisor"),
     auditLog({ action: AUDIT_ACTIONS.UPDATE, entityType: "chat_channel" }),
     async (req, res, next) => {
       try {
@@ -56,7 +56,7 @@ export function registerChannelRoutes(app: Express) {
       } catch (e) { next(e); }
     });
 
-  app.post("/api/channels/:id/archive", requireAuth,
+  app.post("/api/channels/:id/archive", requireRole("admin", "supervisor"),
     auditLog({ action: AUDIT_ACTIONS.UPDATE, entityType: "chat_channel" }),
     async (req, res, next) => {
       try {
@@ -67,16 +67,17 @@ export function registerChannelRoutes(app: Express) {
     });
 
   // ─── Members ───
-  app.get("/api/channels/:id/members", requireAuth, async (req, res, next) => {
-    try {
-      res.json(await storage.getChannelMembers(Number(req.params.id)));
-    } catch (e) { next(e); }
-  });
-
+  // IMPORTANT: literal path must be registered before :id parameterized path
   app.get("/api/channels/user/memberships", requireAuth, async (req, res, next) => {
     try {
       const user = req.user as Express.User;
       res.json(await storage.getUserChannels(user.id));
+    } catch (e) { next(e); }
+  });
+
+  app.get("/api/channels/:id/members", requireAuth, async (req, res, next) => {
+    try {
+      res.json(await storage.getChannelMembers(Number(req.params.id)));
     } catch (e) { next(e); }
   });
 
