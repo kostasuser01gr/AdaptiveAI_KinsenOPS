@@ -111,7 +111,7 @@ toolRegistry.register({
       return { content: "Vehicle not found.", isError: true };
     }
     const updated = await storage.updateVehicle(input.vehicleId as number, {
-      status: input.status as string,
+      status: input.status as typeof import("../../../../shared/schema.js").VEHICLE_STATUSES[number],
     });
     return {
       content: `Updated vehicle ${updated.plate} status from "${vehicle.status}" to "${updated.status}".`,

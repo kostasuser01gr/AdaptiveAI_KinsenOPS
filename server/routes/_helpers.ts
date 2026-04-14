@@ -269,7 +269,7 @@ export async function executeAutomationRule(
             const vehicleId = action.vehicleId as number | undefined;
             const newStatus = action.status as string | undefined;
             if (vehicleId && newStatus) {
-              const v = await storage.updateVehicle(vehicleId, { status: newStatus });
+              const v = await storage.updateVehicle(vehicleId, { status: newStatus as typeof import("../../shared/schema.js").VEHICLE_STATUSES[number] });
               if (v) wsManager.broadcast({ type: 'vehicle:updated', data: v, channel: 'vehicles' });
               results.push({ action: actionType, success: !!v, details: v ? `Vehicle #${v.id} → ${newStatus}` : 'Vehicle not found' });
             } else {
