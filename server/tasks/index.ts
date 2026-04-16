@@ -20,6 +20,7 @@ import { anomalyDetectionTask } from "./anomalyDetection.js";
 import { connectorSyncTask } from "./connectorSync.js";
 import { exportProcessorTask } from "./exportProcessor.js";
 import { exportCleanupTask } from "./exportCleanup.js";
+import { predictiveMaintenanceTask } from "./predictiveMaintenance.js";
 import { logger } from "../observability/logger.js";
 
 const allTasks = [
@@ -29,6 +30,7 @@ const allTasks = [
   connectorSyncTask,
   exportProcessorTask,
   exportCleanupTask,
+  predictiveMaintenanceTask,
 ];
 
 function createRunner(): TaskRunner | BullMQRunner {

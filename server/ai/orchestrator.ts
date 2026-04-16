@@ -10,7 +10,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Request, Response } from "express";
 import { toolRegistry } from "./tools/registry.js";
-import type { ToolContext, SSEEvent, MessageMetadata, ToolResult } from "./tools/types.js";
+import type { ToolContext, SSEEvent, UIBlock, MessageMetadata, ToolResult } from "./tools/types.js";
 import { logger } from "../observability/logger.js";
 import { getCircuitBreaker, CircuitBreakerOpenError } from "../circuitBreaker.js";
 import { sanitizeInput } from "../middleware/validation.js";

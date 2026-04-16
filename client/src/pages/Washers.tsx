@@ -7,7 +7,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Droplets, CheckCircle2, QrCode, MonitorSmartphone, Loader2, Plus } from 'lucide-react';
+import { Droplets, CheckCircle2, QrCode, MonitorSmartphone, Loader2, Plus, Users2 } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { MotionDialog } from "@/components/motion";
 import { Input } from "@/components/ui/input";
@@ -37,6 +37,11 @@ export default function WashersPage() {
 
   const { data: queue, isLoading } = useQuery<WashQueueItem[]>({
     queryKey: ["/api/wash-queue"],
+  });
+
+  const { data: washerLoads } = useQuery<Array<{ washer: string; active: number; lastSeenAt: string | null }>>({
+    queryKey: ["/api/wash-queue/washer-loads"],
+    refetchInterval: 30_000,
   });
 
   const createMutation = useMutation({
@@ -186,6 +191,44 @@ export default function WashersPage() {
                     <span className="text-sm text-muted-foreground">In Queue</span>
                     <span className="font-bold text-xl">{pending.length}</span>
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card className="glass-panel">
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Users2 className="h-4 w-4 text-primary" /> Washer Loads
+                  </CardTitle>
+                  <Badge variant="outline" className="text-[10px]">Auto-assign</Badge>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {Array.isArray(washerLoads) && washerLoads.length > 0 ? (
+                    [...washerLoads]
+                      .sort((a, b) => b.active - a.active || a.washer.localeCompare(b.washer))
+                      .slice(0, 6)
+                      .map((w) => {
+                        const pct = Math.min(w.active * 20, 100);
+                        const tone = w.active === 0 ? 'bg-green-500/40' : w.active <= 2 ? 'bg-primary/60' : 'bg-amber-500/70';
+                        return (
+                          <div key={w.washer} className="space-y-1" data-testid={`washer-load-${w.washer}`}>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-medium truncate">{w.washer}</span>
+                              <span className="text-muted-foreground">{w.active} active</span>
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                              <div className={`h-full ${tone} transition-all`} style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-4">
+                      No recent washer activity. New items will stay unassigned until a washer claims one.
+                    </p>
+                  )}
+                  <p className="text-[10px] text-muted-foreground pt-2 border-t border-border/50">
+                    New queue items auto-assign to the least-loaded washer.
+                  </p>
                 </CardContent>
               </Card>
 

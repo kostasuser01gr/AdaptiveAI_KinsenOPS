@@ -1,8 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Send, Paperclip, Slash } from 'lucide-react';
+import { Send, Paperclip, Slash, Mic, Loader2, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { SlashCommand } from '@/pages/chat/types';
+import { useVoiceInput } from '@/hooks/useVoiceInput';
+import { usePrefs } from '@/lib/AppContext';
 
 interface ChatInputProps {
   input: string;
@@ -18,6 +20,16 @@ export function ChatInput({ input, setInput, isTyping, slashCommands, onSend, on
   const [showSlashMenu, setShowSlashMenu] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
+  const { language } = usePrefs();
+
+  const voice = useVoiceInput({
+    language,
+    onResult: (text) => {
+      setInput(input ? `${input.trim()} ${text}` : text);
+      // Refocus so the user can edit or hit Enter immediately.
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    },
+  });
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -137,6 +149,33 @@ export function ChatInput({ input, setInput, isTyping, slashCommands, onSend, on
               </TooltipTrigger><TooltipContent>Slash commands</TooltipContent></Tooltip>
             </div>
             <div className="flex items-center gap-2">
+              {voice.isSupported && (
+                <Tooltip><TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`h-8 w-8 rounded-full shrink-0 transition-colors ${
+                      voice.state === 'recording' ? 'bg-red-500/15 text-red-500 animate-pulse' :
+                      voice.state === 'transcribing' ? 'bg-primary/10 text-primary' :
+                      'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                    onClick={() => voice.state === 'recording' ? voice.stop() : void voice.start()}
+                    disabled={voice.state === 'transcribing' || isTyping}
+                    aria-label={voice.state === 'recording' ? 'Stop recording' : 'Start voice input'}
+                    data-testid="button-voice-input"
+                  >
+                    {voice.state === 'recording' ? <Square className="h-4 w-4" />
+                      : voice.state === 'transcribing' ? <Loader2 className="h-4 w-4 animate-spin" />
+                      : <Mic className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger><TooltipContent>
+                  {voice.error
+                    ? voice.error
+                    : voice.state === 'recording' ? 'Stop and transcribe'
+                    : voice.state === 'transcribing' ? 'Transcribing…'
+                    : 'Voice input'}
+                </TooltipContent></Tooltip>
+              )}
               <Button onClick={onSend} disabled={!input.trim() || isTyping}
                 className={`h-8 w-8 rounded-full shrink-0 transition-colors ${input.trim() ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'bg-muted text-muted-foreground'}`}
                 size="icon" data-testid="button-send-message">

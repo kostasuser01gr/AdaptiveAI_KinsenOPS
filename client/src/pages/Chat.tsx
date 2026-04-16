@@ -6,11 +6,12 @@ import { apiRequest } from '@/lib/queryClient';
 import { queryKeys } from '@/lib/queryKeys';
 import { useLocation } from 'wouter';
 import {
-  ChevronDown, Zap,
+  ChevronDown, Bot, Zap,
   Car, Droplets, CalendarDays, Shield, Brain, BarChart3,
   Slash, AtSign, ArrowRight,
   LayoutGrid, Lightbulb, Package,
-  PanelLeft
+  PanelLeft, Settings2,
+  Search, Database
 } from 'lucide-react';
 import { useUserTabs, useTabWidgets, useWidgetCatalog } from '@/hooks/useTabWidgets';
 import { Button } from '@/components/ui/button';
@@ -100,6 +101,22 @@ export default function ChatPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isTyping]);
+
+  // ─── Read ?prompt= from URL (e.g. command palette → chat handoff) ───
+  const urlPromptHandled = useRef(false);
+  const [pendingAutoSend, setPendingAutoSend] = useState(false);
+  useEffect(() => {
+    if (urlPromptHandled.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const prompt = params.get('prompt');
+    if (!prompt) { urlPromptHandled.current = true; return; }
+    urlPromptHandled.current = true;
+    setInput(prompt);
+    if (params.get('send') === '1') setPendingAutoSend(true);
+    params.delete('prompt'); params.delete('send');
+    const newSearch = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (newSearch ? `?${newSearch}` : ''));
+  }, []);
 
   // ─── Mutations ───
   const deleteConvMutation = useMutation({
@@ -376,7 +393,7 @@ export default function ChatPage() {
         if (!args.trim()) { addAssistantMessage('Usage: `/idea <your idea>` — e.g. `/idea Add a dark mode toggle to the header`'); return; }
         addToolCallMessage('Ideas.submit()', `"${args.trim().slice(0, 50)}..."`);
         try {
-          await apiRequest('POST', '/api/proposals', {
+          await apiRequest('POST', '/api/workspace-proposals', {
             label: args.trim().slice(0, 100), description: args.trim(),
             type: 'idea', category: 'general', impact: 'low', scope: 'workspace', payload: {},
           });
@@ -391,6 +408,72 @@ export default function ChatPage() {
       command: '/workspace', label: 'Open Workspace', description: 'Go to modular workspace',
       icon: <LayoutGrid className="h-4 w-4" />,
       handler: () => { navigate('/workspace'); }
+    },
+    {
+      command: '/search', label: 'Knowledge Search', description: 'Semantic search across docs & policies',
+      icon: <Search className="h-4 w-4" />,
+      handler: async (args: string) => {
+        const q = args.trim();
+        if (!q) { addAssistantMessage('Usage: `/search <query>` — e.g. `/search refund policy for late returns`'); return; }
+        addToolCallMessage('KnowledgeBase.semanticSearch()', `Searching: "${q}"`);
+        try {
+          const res = await apiRequest('GET', `/api/knowledge-base/semantic-search?q=${encodeURIComponent(q)}&topK=5`);
+          const hits = res.ok ? await res.json() : [];
+          if (!Array.isArray(hits) || hits.length === 0) {
+            addAssistantMessage(`No matching knowledge for **"${q}"**. Try broader terms or upload more documents in [Knowledge Base](/knowledge).`);
+            return;
+          }
+          const body = hits.slice(0, 5).map((h: any, i: number) => {
+            const title = h?.metadata?.title || `Document ${h.documentId}`;
+            const cat = h?.metadata?.category ? ` · ${h.metadata.category}` : '';
+            const score = typeof h.score === 'number' ? ` (${Math.round(h.score * 100)}%)` : '';
+            const snippet = String(h.content || '').replace(/\s+/g, ' ').slice(0, 220);
+            return `**${i + 1}. ${title}**${cat}${score}\n> ${snippet}${snippet.length >= 220 ? '…' : ''}`;
+          }).join('\n\n');
+          addAssistantMessage(`Top matches for **"${q}"**:\n\n${body}`);
+        } catch (e: any) {
+          addAssistantMessage(`Search failed: ${e?.message || 'unknown error'}`);
+        }
+      }
+    },
+    {
+      command: '/data', label: 'Ask Data (NL→SQL)', description: 'Natural-language analytics query',
+      icon: <Database className="h-4 w-4" />,
+      handler: async (args: string) => {
+        const q = args.trim();
+        if (!q) { addAssistantMessage('Usage: `/data <question>` — e.g. `/data top 5 washers by completed washes this month`'); return; }
+        addToolCallMessage('Analytics.nlQuery()', `Translating: "${q}"`);
+        try {
+          const res = await apiRequest('POST', '/api/analytics/nl-query', { question: q, maxRows: 25 });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            const msg = err?.message || `Query failed (${res.status})`;
+            addAssistantMessage(`**Query rejected**: ${msg}\n\nThis tool is limited to read-only queries for admins, supervisors, and coordinators.`);
+            return;
+          }
+          const data = await res.json();
+          if (!data.rows?.length) {
+            addAssistantMessage(`Query ran (${data.latencyMs}ms) but returned no rows.\n\n\`\`\`sql\n${data.sql}\n\`\`\``);
+            return;
+          }
+          const cols = Object.keys(data.rows[0]);
+          const previewRows = data.rows.slice(0, 10);
+          const header = `| ${cols.join(' | ')} |`;
+          const sep = `| ${cols.map(() => '---').join(' | ')} |`;
+          const body = previewRows.map((r: any) =>
+            `| ${cols.map(c => {
+              const v = r[c];
+              if (v === null || v === undefined) return '—';
+              if (typeof v === 'object') return JSON.stringify(v);
+              return String(v).slice(0, 60);
+            }).join(' | ')} |`
+          ).join('\n');
+          const more = data.rowCount > previewRows.length ? `\n\n_Showing ${previewRows.length} of ${data.rowCount} rows. Open [Analytics → Ask Data](/analytics) for the full table._` : '';
+          addAssistantMessage(`**Result** (${data.rowCount} rows · ${data.latencyMs}ms)\n\n${header}\n${sep}\n${body}${more}\n\n<details><summary>Generated SQL</summary>\n\n\`\`\`sql\n${data.sql}\n\`\`\`\n\n</details>`);
+        } catch (e: any) {
+          addAssistantMessage(`Query failed: ${e?.message || 'unknown error'}`);
+        }
+      }
     },
   ], [messages, dashStats, navigate, catalog, createTab, queryClient, callAI, setIsTyping]);
 
@@ -432,6 +515,14 @@ export default function ChatPage() {
     setIsTyping(true);
     callAI(userContent, [...messages, newMsg], setMessages);
   };
+
+  // Auto-send the URL-supplied prompt once input is set.
+  useEffect(() => {
+    if (!pendingAutoSend) return;
+    if (!input.trim()) return;
+    setPendingAutoSend(false);
+    handleSend();
+  }, [pendingAutoSend, input]);
 
   const handleSlashSelect = (cmd: SlashCommand) => {
     const parts = input.split(' ');

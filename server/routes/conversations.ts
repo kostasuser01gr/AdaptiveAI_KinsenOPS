@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import express, { type Express } from "express";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { requireAuth } from "../auth.js";
@@ -12,6 +12,8 @@ import { configResolver } from "../config/resolver.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { orchestrate } from "../ai/orchestrator.js";
 import { buildSystemPrompt, getMemoryContext } from "../ai/systemPrompt.js";
+import { retrieveContext as retrieveRagContext } from "../ai/rag.js";
+import { transcribeAudio, TRANSCRIBE_ACCEPTED_MIME, TRANSCRIBE_MAX_BYTES } from "../ai/transcribe.js";
 import { resolveAllCapabilities, CAPABILITIES } from "../capabilities/engine.js";
 import { getWorkspaceScope } from "../middleware/workspaceContext.js";
 import type { ToolContext } from "../ai/tools/types.js";
@@ -124,9 +126,15 @@ export function registerConversationRoutes(app: Express) {
         trimmedMessages.unshift(validatedMessages[i]);
       }
 
-      // Build workspace memory + system prompt via the prompt builder
+      // Build workspace memory + RAG context + system prompt via the prompt builder.
+      // RAG is opportunistic — failures are swallowed so chat keeps working even if
+      // pgvector / OpenAI embeddings are unavailable.
       const lastMsg = trimmedMessages[trimmedMessages.length - 1]?.content || '';
-      const memoryContext = await getMemoryContext(lastMsg);
+      const [memoryContext, ragContext] = await Promise.all([
+        getMemoryContext(lastMsg),
+        lastMsg ? retrieveRagContext(lastMsg) : Promise.resolve(""),
+      ]);
+      const combinedMemory = memoryContext + ragContext;
 
       // Resolve capabilities for tool filtering
       const allCaps: Record<string, boolean> = {};
@@ -146,7 +154,7 @@ export function registerConversationRoutes(app: Express) {
         screen: safeContext.screen,
       };
 
-      const systemPrompt = buildSystemPrompt(toolContext, safeContext, memoryContext);
+      const systemPrompt = buildSystemPrompt(toolContext, safeContext, combinedMemory);
 
       // SSE streaming
       res.writeHead(200, {
@@ -269,6 +277,39 @@ export function registerConversationRoutes(app: Express) {
       }
     } catch (e) { next(e); }
   });
+
+  // Speech-to-text — raw audio body (browser MediaRecorder → fetch(body=Blob)).
+  // Uses express.raw to bypass the 1MB JSON parser while enforcing its own cap.
+  // The accepted MIME set is narrow so an attacker can't send arbitrary blobs.
+  app.post(
+    "/api/ai/transcribe",
+    requireAuth,
+    aiChatLimiter,
+    express.raw({
+      type: (req) => TRANSCRIBE_ACCEPTED_MIME.has((req.headers['content-type'] || '').split(';')[0]?.trim().toLowerCase() || ''),
+      limit: TRANSCRIBE_MAX_BYTES,
+    }),
+    async (req, res, next) => {
+      try {
+        const mime = ((req.headers['content-type'] || '').split(';')[0]?.trim().toLowerCase() || '');
+        if (!TRANSCRIBE_ACCEPTED_MIME.has(mime)) {
+          return res.status(415).json({ message: "Unsupported audio content-type" });
+        }
+        if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+          return res.status(400).json({ message: "Empty audio body" });
+        }
+        const language = typeof req.query.lang === 'string' ? req.query.lang.slice(0, 8) : undefined;
+        const result = await transcribeAudio(req.body, mime, language ? { language } : {});
+        res.json(result);
+      } catch (e) {
+        const err = e as { status?: number; message?: string };
+        if (err.status && err.status >= 400 && err.status < 600) {
+          return res.status(err.status).json({ message: err.message ?? "Transcription failed" });
+        }
+        next(e);
+      }
+    },
+  );
 
   // Available models endpoint
   app.get("/api/ai/models", requireAuth, (_req, res) => {

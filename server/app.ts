@@ -86,7 +86,7 @@ function configureSecurity(app: Express): void {
       permissionsPolicy: {
         features: {
           camera: ["self"],
-          microphone: ["none"],
+          microphone: ["self"],
           geolocation: ["self"],
           payment: ["none"],
         },
@@ -133,7 +133,7 @@ function configureApiMiddleware(app: Express): void {
 function registerOperationalRoutes(app: Express): void {
   app.get("/healthz", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    let dbOk: boolean;
+    let dbOk = false;
 
     try {
       const client = await pool.connect();
@@ -244,7 +244,24 @@ export function installGlobalErrorHandler(app: Express): void {
     });
 
     if (status >= 500) {
-      Sentry.captureException(err, { extra: { requestId, path: req.path } });
+      const user = req.user as Express.User | undefined;
+      Sentry.withScope((scope) => {
+        scope.setTag("requestId", requestId ?? "unknown");
+        scope.setContext("request", {
+          path: req.path,
+          method: req.method,
+          requestId,
+        });
+        if (user) {
+          scope.setUser({
+            id: String(user.id),
+            username: user.username,
+            role: user.role,
+            workspaceId: user.workspaceId,
+          });
+        }
+        Sentry.captureException(err);
+      });
     }
 
     if (res.headersSent) {
@@ -255,10 +272,8 @@ export function installGlobalErrorHandler(app: Express): void {
       ok: false,
       data: null,
       error: {
-        message: config.isProduction
-          ? "Internal Server Error"
-          : (err.message || "Internal Server Error").slice(0, 500),
-        ...(!config.isProduction && { stack: err.stack?.slice(0, 2000) }),
+        message: config.isProduction ? "Internal Server Error" : err.message || "Internal Server Error",
+        ...(!config.isProduction && { stack: err.stack }),
       },
       requestId,
     });

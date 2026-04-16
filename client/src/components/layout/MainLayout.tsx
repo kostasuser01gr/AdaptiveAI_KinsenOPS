@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Sidebar from './Sidebar';
 import { useApp } from '@/lib/AppContext';
 import { useAuth } from '@/lib/useAuth';
@@ -83,6 +83,18 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       return res.json();
     },
     enabled: !!debouncedSearch.trim() && cmdOpen,
+  });
+
+  const { data: semanticResults } = useQuery<Array<{ documentId: number; chunkIndex: number; content: string; score: number; metadata?: { title?: string; category?: string } | null }>>({
+    queryKey: ["/api/knowledge-base/semantic-search", debouncedSearch],
+    queryFn: async () => {
+      if (!debouncedSearch.trim() || debouncedSearch.trim().length < 4) return [];
+      const res = await apiRequest("GET", `/api/knowledge-base/semantic-search?q=${encodeURIComponent(debouncedSearch)}&topK=5`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!debouncedSearch.trim() && debouncedSearch.trim().length >= 4 && cmdOpen,
+    staleTime: 30_000,
   });
 
   const { data: activityData } = useQuery({
@@ -342,6 +354,51 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               ))}
             </CommandGroup>
           )}
+          {Array.isArray(semanticResults) && semanticResults.length > 0 && (
+            <CommandGroup heading="Knowledge Base">
+              {semanticResults.map((r, i) => (
+                <CommandItem
+                  key={`kb-${r.documentId}-${r.chunkIndex}-${i}`}
+                  className="cursor-pointer"
+                  onSelect={() => {
+                    setCmdOpen(false);
+                    navigate(`/knowledge?docId=${r.documentId}`);
+                  }}
+                >
+                  <div className="flex items-start gap-2 min-w-0">
+                    <Database className="h-4 w-4 text-purple-400 mt-0.5 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium truncate">
+                        {r.metadata?.title ?? `Document #${r.documentId}`}
+                        {r.metadata?.category && (
+                          <span className="ml-2 text-[10px] uppercase tracking-wider text-muted-foreground">{r.metadata.category}</span>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground line-clamp-1">{r.content}</div>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/70 shrink-0">{(r.score * 100).toFixed(0)}%</span>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+          {searchQuery.trim().length > 0 && (
+            <CommandGroup heading="Ask DriveAI">
+              <CommandItem
+                className="cursor-pointer"
+                onSelect={() => {
+                  setCmdOpen(false);
+                  trackAction(`Ask: ${searchQuery}`);
+                  navigate(`/?prompt=${encodeURIComponent(searchQuery)}&send=1`);
+                }}
+              >
+                <div className="flex items-center gap-2 text-primary">
+                  <Zap className="h-4 w-4" />
+                  <span>Ask: "{searchQuery.length > 60 ? searchQuery.slice(0, 60) + '…' : searchQuery}"</span>
+                </div>
+              </CommandItem>
+            </CommandGroup>
+          )}
           {recentActions.length > 0 && !searchQuery.trim() && (
             <CommandGroup heading="Recent">
               {recentActions.slice(0, 5).map((label, i) => (
@@ -354,20 +411,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               ))}
             </CommandGroup>
           )}
-          <CommandGroup heading="Ask DriveAI">
-            <CommandItem className="cursor-pointer" onSelect={() => nav('/')}>
-              <div className="flex items-center gap-2 text-primary">
-                <Zap className="h-4 w-4" />
-                <span>Ask: "Summarize today's delays"</span>
-              </div>
-            </CommandItem>
-            <CommandItem className="cursor-pointer" onSelect={() => nav('/')}>
-              <div className="flex items-center gap-2 text-primary">
-                <Zap className="h-4 w-4" />
-                <span>Ask: "Which vehicles need attention?"</span>
-              </div>
-            </CommandItem>
-          </CommandGroup>
+          {!searchQuery.trim() && (
+            <CommandGroup heading="Suggested questions">
+              <CommandItem className="cursor-pointer" onSelect={() => { setCmdOpen(false); navigate(`/?prompt=${encodeURIComponent("Summarize today's delays")}&send=1`); }}>
+                <div className="flex items-center gap-2 text-primary">
+                  <Zap className="h-4 w-4" />
+                  <span>Ask: "Summarize today's delays"</span>
+                </div>
+              </CommandItem>
+              <CommandItem className="cursor-pointer" onSelect={() => { setCmdOpen(false); navigate(`/?prompt=${encodeURIComponent("Which vehicles need attention?")}&send=1`); }}>
+                <div className="flex items-center gap-2 text-primary">
+                  <Zap className="h-4 w-4" />
+                  <span>Ask: "Which vehicles need attention?"</span>
+                </div>
+              </CommandItem>
+            </CommandGroup>
+          )}
           {customActions.length > 0 && (
             <CommandGroup heading="Custom Actions">
               {customActions.map(action => (

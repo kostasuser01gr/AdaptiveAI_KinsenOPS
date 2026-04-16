@@ -9,6 +9,9 @@ import { incidents, repairOrders } from "./incidents.js";
 import { integrationConnectors } from "./integrations.js";
 
 // ─── VEHICLES ───
+export const VEHICLE_STATUSES = ['ready', 'rented', 'maintenance', 'washing', 'transit', 'retired', 'impounded', 'returned'] as const;
+export type VehicleStatus = typeof VEHICLE_STATUSES[number];
+
 export const vehicles = pgTable("vehicles", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   workspaceId: text("workspace_id").notNull().default("default").references(() => workspaces.id),
@@ -28,14 +31,7 @@ export const vehicles = pgTable("vehicles", {
   index("vehicles_station_idx").on(t.stationId),
   uniqueIndex("vehicles_ws_plate_idx").on(t.workspaceId, t.plate),
 ]);
-export const VEHICLE_STATUSES = ['ready', 'rented', 'maintenance', 'washing', 'transit', 'retired', 'impounded'] as const;
-export const insertVehicleSchema = createInsertSchema(vehicles).omit({ deletedAt: true }).extend({
-  plate: z.string().min(1).max(20),
-  model: z.string().min(1).max(100),
-  category: z.string().max(10).default('B'),
-  sla: z.string().max(20).default('normal'),
-  status: z.enum(VEHICLE_STATUSES).default('ready'),
-});
+export const insertVehicleSchema = createInsertSchema(vehicles).omit({ deletedAt: true });
 export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
 export type Vehicle = typeof vehicles.$inferSelect;
 

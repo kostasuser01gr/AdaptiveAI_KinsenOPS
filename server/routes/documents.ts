@@ -12,6 +12,8 @@ import { documentStorage, validateUpload, LOCAL_UPLOAD_DIR } from "../document-s
 import {
   insertFileAttachmentSchema, insertKnowledgeDocumentSchema,
 } from "../../shared/schema.js";
+import { indexDocument, deleteDocumentIndex, retrieve as ragRetrieve } from "../ai/rag.js";
+import { logger } from "../observability/logger.js";
 
 export function registerDocumentRoutes(app: Express) {
   // FILE ATTACHMENTS
@@ -160,11 +162,15 @@ export function registerDocumentRoutes(app: Express) {
       if (doc.uploadedBy !== user.id && user.role !== 'admin') {
         return res.status(403).json({ message: "Forbidden" });
       }
+      await deleteDocumentIndex(Number(req.params.id)).catch((err) =>
+        logger.warn("Failed to drop RAG index for document", { id: req.params.id, error: String(err) }),
+      );
       await storage.deleteKnowledgeDocument(Number(req.params.id));
       res.status(204).end();
     } catch (e) { next(e); }
   });
 
+  // Legacy substring search kept for UIs that haven't switched to semantic.
   app.get("/api/knowledge-base/search", requireAuth, async (req, res, next) => {
     try {
       const query = String(req.query.q || '').trim();
@@ -173,4 +179,41 @@ export function registerDocumentRoutes(app: Express) {
       res.json(results);
     } catch (e) { next(e); }
   });
+
+  // Semantic search over indexed chunks (pgvector cosine).
+  app.get("/api/knowledge-base/semantic-search", requireAuth, async (req, res, next) => {
+    try {
+      const query = String(req.query.q || '').trim();
+      if (!query) return res.status(400).json({ message: "Query parameter 'q' required" });
+      const topK = Math.min(Math.max(Number(req.query.topK) || 8, 1), 25);
+      const category = req.query.category ? String(req.query.category) : undefined;
+      const chunks = await ragRetrieve(query, { topK, ...(category ? { category } : {}) });
+      res.json({ query, chunks });
+    } catch (e) { next(e); }
+  });
+
+  // Re-embed and re-index a document. Body: { content: string } — server passes
+  // whatever text extraction upstream (OCR, parsing) produced. Keeps RAG
+  // pipeline decoupled from storage format.
+  app.post(
+    "/api/knowledge-base/documents/:id/reindex",
+    requireAuth,
+    requireCapability("document_ingest"),
+    auditLog({ action: AUDIT_ACTIONS.UPDATE, entityType: 'knowledge_document' }),
+    async (req, res, next) => {
+      try {
+        const doc = await storage.getKnowledgeDocument(Number(req.params.id));
+        if (!doc) return res.status(404).json({ message: "Not found" });
+        const user = req.user as Express.User;
+        if (doc.uploadedBy !== user.id && user.role !== 'admin' && user.role !== 'supervisor') {
+          return res.status(403).json({ message: "Forbidden" });
+        }
+        const content = typeof req.body?.content === 'string' ? req.body.content : '';
+        if (!content.trim()) return res.status(400).json({ message: "Body.content (string) required" });
+        if (content.length > 2_000_000) return res.status(413).json({ message: "Content exceeds 2MB" });
+        const result = await indexDocument(Number(req.params.id), content);
+        res.json({ documentId: doc.id, ...result });
+      } catch (e) { next(e); }
+    },
+  );
 }

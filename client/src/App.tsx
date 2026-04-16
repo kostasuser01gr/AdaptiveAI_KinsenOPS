@@ -57,6 +57,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { InstallPrompt, PWAProvider } from "@/components/pwa/InstallPrompt";
 import { AnimatedPage, AnimatePresence } from "@/lib/animations";
 import { isRoleAtLeast } from "../../shared/roles";
+import { Sentry, setSentryUser } from "@/lib/sentry";
 
 // ─── Error Boundary ──────────────────────────────────────────────────────────
 interface EBState { hasError: boolean; error?: Error }
@@ -71,7 +72,11 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
   }
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[ErrorBoundary]", error, info.componentStack);
-    // Report to server (fire-and-forget)
+    Sentry.withScope((scope) => {
+      scope.setContext("react", { componentStack: info.componentStack });
+      scope.setTag("boundary", "app-react");
+      Sentry.captureException(error);
+    });
     fetch("/api/client-errors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -82,7 +87,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
         url: window.location.href,
         userAgent: navigator.userAgent,
       }),
-    }).catch(() => {}); // Silently ignore reporting failures
+    }).catch(() => {});
   }
   render() {
     if (this.state.hasError) {
@@ -108,6 +113,24 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
     }
     return this.props.children;
   }
+}
+
+// ─── Sentry user sync ─────────────────────────────────────────────────────────
+function SentryUserSync() {
+  const { user } = useAuth();
+  React.useEffect(() => {
+    if (user) {
+      setSentryUser({
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        workspaceId: user.workspaceId,
+      });
+    } else {
+      setSentryUser(null);
+    }
+  }, [user]);
+  return null;
 }
 
 // ─── Loading skeletons ────────────────────────────────────────────────────────
@@ -285,6 +308,7 @@ function App() {
       <AppProvider>
         <PWAProvider>
           <TooltipProvider delayDuration={200}>
+            <SentryUserSync />
             <ConnectionBanner />
             <ErrorBoundary>
               <Router />

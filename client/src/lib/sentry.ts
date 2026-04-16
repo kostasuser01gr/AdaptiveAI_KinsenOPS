@@ -12,8 +12,29 @@ export function initSentry() {
     replaysOnErrorSampleRate: import.meta.env.PROD ? 1.0 : 0,
     integrations: [
       Sentry.browserTracingIntegration(),
-      Sentry.replayIntegration(),
+      Sentry.replayIntegration({ maskAllText: false, blockAllMedia: false }),
     ],
+  });
+}
+
+export interface SentryUserShape {
+  id: number;
+  username: string;
+  role: string;
+  workspaceId?: string | null;
+}
+
+export function setSentryUser(user: SentryUserShape | null) {
+  if (!import.meta.env.VITE_SENTRY_DSN) return;
+  if (!user) {
+    Sentry.setUser(null);
+    return;
+  }
+  Sentry.setUser({
+    id: String(user.id),
+    username: user.username,
+    role: user.role,
+    workspaceId: user.workspaceId ?? "default",
   });
 }
 

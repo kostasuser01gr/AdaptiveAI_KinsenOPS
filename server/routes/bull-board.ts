@@ -7,6 +7,7 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 import { Queue } from "bullmq";
 import type { Express } from "express";
+import { WEBHOOK_QUEUE_NAME } from "../webhooks/queue.js";
 
 const QUEUE_NAME = "adaptive-tasks";
 
@@ -19,13 +20,14 @@ export function mountBullBoard(app: Express, redisUrl: string): void {
     ...(url.protocol === "rediss:" && { tls: {} }),
   };
 
-  const queue = new Queue(QUEUE_NAME, { connection });
+  const tasksQueue = new Queue(QUEUE_NAME, { connection });
+  const webhooksQueue = new Queue(WEBHOOK_QUEUE_NAME, { connection });
 
   const serverAdapter = new ExpressAdapter();
   serverAdapter.setBasePath("/admin/queues");
 
   createBullBoard({
-    queues: [new BullMQAdapter(queue)],
+    queues: [new BullMQAdapter(tasksQueue), new BullMQAdapter(webhooksQueue)],
     serverAdapter,
   });
 

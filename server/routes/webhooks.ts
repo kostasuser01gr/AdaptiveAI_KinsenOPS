@@ -2,16 +2,21 @@
  * Webhook management & delivery routes.
  * Provides CRUD for webhook endpoints and a delivery log viewer.
  * Also exports `dispatchWebhookEvent()` for internal use by other routes.
+ *
+ * Actual HTTP delivery runs through the durable queue in server/webhooks/queue.ts
+ * (BullMQ-backed when REDIS_URL is set, in-process retry-with-backoff otherwise).
  */
 import type { Express, Request, Response } from "express";
 import { requireRole } from "../auth.js";
 import { db } from "../db.js";
 import { webhooks, webhookDeliveries, insertWebhookSchema } from "../../shared/schema.js";
 import { eq, desc } from "drizzle-orm";
-import { randomBytes, createHmac } from "crypto";
+import { randomBytes } from "crypto";
 import { logger } from "../observability/logger.js";
 import { validateIdParam } from "../middleware/validation.js";
 import { z } from "zod/v4";
+import { getWebhookQueue } from "../webhooks/queue.js";
+import { newDeliveryId } from "../webhooks/delivery.js";
 
 function isAllowedWebhookUrl(url: string): boolean {
   try {
@@ -41,7 +46,6 @@ export function registerWebhookRoutes(app: Express) {
   app.get("/api/webhooks", requireRole("admin", "supervisor"), async (_req: Request, res: Response, next) => {
     try {
       const rows = await db.select().from(webhooks).orderBy(desc(webhooks.createdAt));
-      // Strip secrets from response
       res.json(rows.map(r => ({ ...r, secret: "••••••" })));
     } catch (e) { next(e); }
   });
@@ -99,9 +103,14 @@ export function registerWebhookRoutes(app: Express) {
     try {
       const [wh] = await db.select().from(webhooks).where(eq(webhooks.id, Number(req.params.id)));
       if (!wh) return res.status(404).json({ message: "Webhook not found" });
-      const testPayload = { event: "test", timestamp: new Date().toISOString(), data: { message: "Webhook test delivery" } };
-      const result = await deliverWebhook(wh, "test", testPayload);
-      res.json(result);
+      const testPayload = { message: "Webhook test delivery" };
+      const deliveryId = await getWebhookQueue().enqueue({
+        webhookId: wh.id,
+        eventType: "test",
+        payload: testPayload,
+        deliveryId: newDeliveryId(),
+      });
+      res.json({ status: "enqueued", deliveryId });
     } catch (e) { next(e); }
   });
 }
@@ -109,6 +118,7 @@ export function registerWebhookRoutes(app: Express) {
 /**
  * Dispatch a webhook event to all active subscribers.
  * Called from other route modules when events happen.
+ * Enqueues one durable delivery job per matching subscriber.
  */
 export async function dispatchWebhookEvent(eventType: string, payload: Record<string, unknown>) {
   try {
@@ -117,64 +127,12 @@ export async function dispatchWebhookEvent(eventType: string, payload: Record<st
       const events = wh.events as string[];
       return events.includes("*") || events.includes(eventType);
     });
-    // Fire-and-forget — don't block the caller
+    const queue = getWebhookQueue();
     for (const wh of matching) {
-      deliverWebhook(wh, eventType, payload).catch(err => logger.error('Webhook delivery failed', err, { webhookId: wh.id, eventType }));
+      queue.enqueue({ webhookId: wh.id, eventType, payload })
+        .catch((err: unknown) => logger.error("Webhook enqueue failed", err as Error, { webhookId: wh.id, eventType }));
     }
   } catch (err) {
     logger.error('Failed to dispatch webhook event', err as Error, { eventType });
   }
-}
-
-async function deliverWebhook(
-  wh: typeof webhooks.$inferSelect,
-  eventType: string,
-  payload: Record<string, unknown>
-): Promise<{ status: string; responseCode?: number }> {
-  const body = JSON.stringify({ event: eventType, timestamp: new Date().toISOString(), data: payload });
-  const signature = createHmac("sha256", wh.secret).update(body).digest("hex");
-
-  let responseCode: number | undefined;
-  let responseBody: string | undefined;
-  let status: string;
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const resp = await fetch(wh.url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Webhook-Signature": `sha256=${signature}`,
-        "X-Webhook-Event": eventType,
-      },
-      body,
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    responseCode = resp.status;
-    responseBody = await resp.text().catch(() => "");
-    status = resp.ok ? "success" : "failed";
-  } catch {
-    status = "failed";
-    responseBody = "Connection error or timeout";
-  }
-
-  // Record delivery
-  await db.insert(webhookDeliveries).values({
-    webhookId: wh.id,
-    eventType,
-    payload,
-    status,
-    responseCode,
-    responseBody: responseBody?.slice(0, 2000),
-    attempt: 1,
-  }).catch(err => logger.error('Failed to record webhook delivery', err, { webhookId: wh.id }));
-
-  // Update last delivered timestamp
-  if (status === "success") {
-    await db.update(webhooks).set({ lastDeliveredAt: new Date() }).where(eq(webhooks.id, wh.id)).catch(err => logger.error('Failed to update webhook timestamp', err));
-  }
-
-  return { status, responseCode };
 }

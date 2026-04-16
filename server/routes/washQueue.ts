@@ -2,11 +2,12 @@ import type { Express } from "express";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 import { wsManager } from "../websocket.js";
-import { publicWashQueueReadLimiter } from "../middleware/rate-limiter.js";
+import { publicWashQueueReadLimiter, publicWashQueueWriteLimiter } from "../middleware/rate-limiter.js";
 import { washQueuePatchSchema, evaluateAutomationRules } from "./_helpers.js";
 import { resolveStationScope } from "../middleware/stationScope.js";
 import { insertWashQueueSchema } from "../../shared/schema.js";
 import { validateIdParam } from "../middleware/validation.js";
+import { getWasherLoads, pickAvailableWasher } from "../wash/autoAssign.js";
 
 export function registerWashQueueRoutes(app: Express) {
   // PUBLIC wash-queue listing (washer tablet)
@@ -22,10 +23,28 @@ export function registerWashQueueRoutes(app: Express) {
       const deadline = data.priority && slaHours[data.priority]
         ? new Date(Date.now() + slaHours[data.priority] * 3600000)
         : null;
-      const item = await storage.createWashQueueItem({ ...data, slaDeadline: deadline } as typeof data);
+
+      // Auto-assign to least-loaded washer when caller didn't pick one.
+      let assignedTo = data.assignedTo;
+      if (!assignedTo || !assignedTo.trim()) {
+        assignedTo = (await pickAvailableWasher(data.stationId ?? null)) ?? undefined;
+      }
+
+      const item = await storage.createWashQueueItem({ ...data, assignedTo, slaDeadline: deadline } as typeof data);
       wsManager.broadcast({ type: 'wash:created', data: item, channel: 'wash-queue' });
       evaluateAutomationRules('wash_created', { washId: item.id, vehiclePlate: item.vehiclePlate });
       res.status(201).json(item);
+    } catch (e) { next(e); }
+  });
+
+  // ─── Current per-washer load (for UI / dashboards) ──────────────────
+  app.get("/api/wash-queue/washer-loads", requireAuth, async (req, res, next) => {
+    try {
+      const stationParam = req.query.stationId;
+      const stationId = typeof stationParam === "string" && stationParam !== ""
+        ? Number(stationParam)
+        : null;
+      res.json(await getWasherLoads(stationId));
     } catch (e) { next(e); }
   });
 

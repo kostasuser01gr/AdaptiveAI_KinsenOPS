@@ -1,15 +1,157 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BarChart3, TrendingUp, TrendingDown, Activity, Car, Droplets, Users, Clock, AlertTriangle, Brain, Download, ArrowRight, Target, Shield } from 'lucide-react';
+import { Textarea } from "@/components/ui/textarea";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { BarChart3, TrendingUp, TrendingDown, Activity, Car, Droplets, Users, Clock, AlertTriangle, Brain, Download, ArrowRight, Target, Shield, Database, Loader2, Sparkles, ChevronDown, Code2 } from 'lucide-react';
+import { CountUp } from '@/components/motion';
 import { StatCard } from '@/components/StatCard';
 import { useEntitlements } from "@/lib/useEntitlements";
+import { useAuth } from "@/lib/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import { LockedFeature } from "@/components/LockedFeature";
+
+interface NlSqlResult {
+  question: string;
+  sql: string;
+  rowCount: number;
+  rows: Record<string, unknown>[];
+  latencyMs: number;
+}
+
+const SAMPLE_QUESTIONS = [
+  "How many vehicles are ready vs in maintenance?",
+  "Top 5 washers by completed washes this month",
+  "Average wash turnaround time over the last 14 days",
+  "Vehicles with no wash in the last 30 days",
+];
+
+function NlQueryPanel() {
+  const { toast } = useToast();
+  const [question, setQuestion] = React.useState("");
+  const [showSql, setShowSql] = React.useState(false);
+
+  const mutation = useMutation<NlSqlResult, Error, string>({
+    mutationFn: async (q: string) => {
+      const res = await apiRequest("POST", "/api/analytics/nl-query", { question: q, maxRows: 100 });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || `Query failed (${res.status})`);
+      }
+      return res.json();
+    },
+    onError: (err) => toast({ title: "Query rejected", description: err.message, variant: "destructive" }),
+  });
+
+  const submit = () => {
+    const q = question.trim();
+    if (q.length < 3) return;
+    mutation.mutate(q);
+  };
+
+  const result = mutation.data;
+  const columns = result && result.rows.length > 0 ? Object.keys(result.rows[0]) : [];
+
+  return (
+    <div className="space-y-4">
+      <Card className="glass-card">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Database className="h-4 w-4 text-primary" /> Ask your data
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Natural-language questions are translated to read-only SQL, scoped to your workspace, capped at 100 rows.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Textarea
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            placeholder="e.g. How many washes did each washer complete this week?"
+            rows={3}
+            data-testid="textarea-nl-question"
+            onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit(); }}
+          />
+          <div className="flex flex-wrap gap-2">
+            {SAMPLE_QUESTIONS.map((s) => (
+              <Button key={s} variant="outline" size="sm" className="text-[11px] h-7"
+                onClick={() => setQuestion(s)} data-testid={`button-sample-${s.slice(0, 20)}`}>
+                <Sparkles className="h-3 w-3 mr-1 opacity-60" /> {s}
+              </Button>
+            ))}
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] text-muted-foreground">Press ⌘/Ctrl + Enter to run</span>
+            <Button onClick={submit} disabled={mutation.isPending || question.trim().length < 3}
+              className="gap-2" data-testid="button-run-nl-query">
+              {mutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+              Run query
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {result && (
+        <Card className="glass-card">
+          <CardHeader className="pb-3 flex flex-row items-center justify-between">
+            <CardTitle className="text-sm">Result</CardTitle>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="text-[10px]" data-testid="badge-row-count">{result.rowCount} rows</Badge>
+              <Badge variant="outline" className="text-[10px]">{result.latencyMs} ms</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Collapsible open={showSql} onOpenChange={setShowSql}>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-7 text-[11px] gap-1 text-muted-foreground" data-testid="button-toggle-sql">
+                  <Code2 className="h-3 w-3" /> {showSql ? 'Hide' : 'Show'} generated SQL
+                  <ChevronDown className={`h-3 w-3 transition-transform ${showSql ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="mt-2">
+                <pre className="text-[11px] bg-muted/40 rounded p-3 overflow-x-auto whitespace-pre-wrap break-words" data-testid="pre-generated-sql">{result.sql}</pre>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {result.rows.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No rows returned.</p>
+            ) : (
+              <div className="overflow-x-auto rounded border border-border/40">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/30 text-left">
+                    <tr>
+                      {columns.map((c) => (
+                        <th key={c} className="px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.rows.map((row, i) => (
+                      <tr key={i} className="border-t border-border/30 hover:bg-muted/10" data-testid={`row-result-${i}`}>
+                        {columns.map((c) => {
+                          const v = row[c];
+                          const display = v === null || v === undefined ? '—'
+                            : typeof v === 'object' ? JSON.stringify(v)
+                            : String(v);
+                          return <td key={c} className="px-3 py-2 whitespace-nowrap font-mono">{display}</td>;
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 function MiniBar({ label, value, max, color = "bg-primary" }: { label: string; value: number; max: number; color?: string }) {
   const pct = Math.min((value / max) * 100, 100);
@@ -26,6 +168,8 @@ function MiniBar({ label, value, max, color = "bg-primary" }: { label: string; v
 
 export default function AnalyticsPage() {
   const { hasFeature } = useEntitlements();
+  const { user } = useAuth();
+  const canRunNlSql = !!user && ['admin', 'supervisor', 'coordinator'].includes(user.role);
   const [trendDays, setTrendDays] = React.useState(30);
 
   const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
@@ -161,6 +305,11 @@ export default function AnalyticsPage() {
               <TabsTrigger value="fleet" data-testid="tab-fleet">Fleet Health</TabsTrigger>
               <TabsTrigger value="team" data-testid="tab-team">Team</TabsTrigger>
               <TabsTrigger value="insights" data-testid="tab-insights">AI Insights</TabsTrigger>
+              {canRunNlSql && (
+                <TabsTrigger value="ask-data" data-testid="tab-ask-data" className="gap-1">
+                  <Database className="h-3 w-3" /> Ask Data
+                </TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="operations" className="mt-4 space-y-6">
@@ -448,6 +597,12 @@ export default function AnalyticsPage() {
                 ))}
               </div>
             </TabsContent>
+
+            {canRunNlSql && (
+              <TabsContent value="ask-data" className="mt-4">
+                <NlQueryPanel />
+              </TabsContent>
+            )}
           </Tabs>
         </div>
       </ScrollArea>

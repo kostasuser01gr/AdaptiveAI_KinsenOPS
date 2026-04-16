@@ -26,8 +26,8 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: prefs, isLoading: loadingPrefs } = useQuery<any[]>({ queryKey: ["/api/user-preferences"] });
-  const { data: memoryData, isLoading: loadingMemory } = useQuery<any[]>({ queryKey: ["/api/workspace-memory"] });
+  const { data: prefs } = useQuery<any[]>({ queryKey: ["/api/user-preferences"] });
+  const { data: memoryData } = useQuery<any[]>({ queryKey: ["/api/workspace-memory"] });
   const memories = Array.isArray(memoryData) ? memoryData : [];
   const savePref = useMutation({
     mutationFn: async (data: { category: string; key: string; value: any }) => {
@@ -240,6 +240,8 @@ export default function SettingsPage() {
                         <SelectContent>
                           <SelectItem value="en">English</SelectItem>
                           <SelectItem value="el">Ελληνικά</SelectItem>
+                          <SelectItem value="de">Deutsch</SelectItem>
+                          <SelectItem value="fr">Français</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -399,11 +401,7 @@ export default function SettingsPage() {
                     <CardDescription>Knowledge the AI assistant has learned about your workspace operations.</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {loadingMemory ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Brain className="h-5 w-5 animate-pulse text-muted-foreground" />
-                      </div>
-                    ) : memories.length > 0 ? (
+                    {memories.length > 0 ? (
                       <>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
                           <Brain className="h-4 w-4" />

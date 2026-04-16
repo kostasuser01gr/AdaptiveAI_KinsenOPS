@@ -4,9 +4,10 @@ import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
 import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
 import { recordUsage, checkUsageCeiling } from "../metering/service.js";
-import { searchLimiter } from "../middleware/rate-limiter.js";
+import { searchLimiter, aiChatLimiter } from "../middleware/rate-limiter.js";
 import { requireEntitlement } from "../entitlements/engine.js";
 import { requireCapability } from "../capabilities/engine.js";
+import { runNlQuery } from "../ai/nlSql.js";
 import {
   insertKpiDefinitionSchema,
 } from "../../shared/schema.js";
@@ -29,6 +30,33 @@ export function registerAnalyticsRoutes(app: Express) {
       res.json(await storage.getAnalyticsTrends(days));
     } catch (e) { next(e); }
   });
+
+  // NL → SQL (read-only, whitelisted schema, statement-timeout, row-cap).
+  // Rate-limited via aiChatLimiter since each call invokes the model. Scoped to
+  // roles that already have broad read access to avoid data exfiltration by
+  // narrow-scope users.
+  const nlQuerySchema = z.object({
+    question: z.string().min(3).max(1000),
+    maxRows: z.number().int().positive().max(500).optional(),
+  }).strict();
+
+  app.post(
+    "/api/analytics/nl-query",
+    requireRole("admin", "supervisor", "coordinator"),
+    aiChatLimiter,
+    searchLimiter,
+    async (req, res, next) => {
+      try {
+        const parsed = nlQuerySchema.parse(req.body);
+        const result = await runNlQuery(parsed.question, parsed.maxRows !== undefined ? { maxRows: parsed.maxRows } : {});
+        res.json(result);
+      } catch (e) {
+        const err = e as { status?: number; message?: string };
+        if (err.status === 422) return res.status(422).json({ message: err.message });
+        next(e);
+      }
+    },
+  );
 
   // ANALYTICS CSV EXPORT
   app.get("/api/analytics/export", requireRole("admin", "supervisor"), async (req, res, next) => {

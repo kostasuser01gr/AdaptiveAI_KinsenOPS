@@ -1,4 +1,5 @@
 import { serveStatic } from "./static.js";
+import { setupVite } from "./vite.js";
 import { createConfiguredApp, registerConfiguredRoutes, installGlobalErrorHandler, Sentry } from "./app.js";
 import { logger } from "./observability/logger.js";
 import { wsManager } from "./websocket.js";
@@ -6,6 +7,7 @@ import { pool } from "./db.js";
 import { taskRunner } from "./tasks/index.js";
 import { eventBus } from "./events/eventBus.js";
 import { config } from "./config.js";
+import { getWebhookQueue } from "./webhooks/queue.js";
 const configuredApp = createConfiguredApp();
 const { app, httpServer } = configuredApp;
 
@@ -21,6 +23,8 @@ export function log(message: string, source = "express") {
   await eventBus.connectRedis();
 
   taskRunner.start();
+
+  await getWebhookQueue().start();
 
   const SHUTDOWN_TIMEOUT_MS = 15_000;
   let shuttingDown = false;
@@ -38,6 +42,7 @@ export function log(message: string, source = "express") {
 
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));
     await taskRunner.stop();
+    await getWebhookQueue().stop();
     await eventBus.destroy();
     wsManager.destroy();
     await pool.end();
@@ -58,10 +63,9 @@ export function log(message: string, source = "express") {
     shutdown().catch(() => process.exit(1));
   });
 
-  if (process.env.NODE_ENV === "production") {
+  if (config.isProduction) {
     serveStatic(app);
   } else {
-    const { setupVite } = await import("./vite.js");
     await setupVite(httpServer, app);
   }
 

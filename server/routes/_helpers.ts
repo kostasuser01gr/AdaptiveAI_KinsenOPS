@@ -5,7 +5,6 @@
 import type { Express } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
-import { VEHICLE_STATUSES } from "../../shared/schema.js";
 import { storage } from "../storage.js";
 import { wsManager } from "../websocket.js";
 import { configResolver } from "../config/resolver.js";
@@ -49,7 +48,7 @@ export const vehiclePatchSchema = z.object({
   model: z.string().optional(),
   category: z.string().optional(),
   stationId: z.number().nullable().optional(),
-  status: z.enum(VEHICLE_STATUSES).optional(),
+  status: z.enum(['ready', 'rented', 'maintenance', 'washing', 'transit', 'retired', 'impounded']).optional(),
   sla: z.string().optional(),
   mileage: z.number().nonnegative().nullable().optional(),
   fuelLevel: z.number().min(0).max(100).nullable().optional(),
@@ -269,7 +268,7 @@ export async function executeAutomationRule(
             const vehicleId = action.vehicleId as number | undefined;
             const newStatus = action.status as string | undefined;
             if (vehicleId && newStatus) {
-              const v = await storage.updateVehicle(vehicleId, { status: newStatus as typeof import("../../shared/schema.js").VEHICLE_STATUSES[number] });
+              const v = await storage.updateVehicle(vehicleId, { status: newStatus });
               if (v) wsManager.broadcast({ type: 'vehicle:updated', data: v, channel: 'vehicles' });
               results.push({ action: actionType, success: !!v, details: v ? `Vehicle #${v.id} → ${newStatus}` : 'Vehicle not found' });
             } else {

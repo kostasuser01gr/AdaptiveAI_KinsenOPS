@@ -78,6 +78,26 @@ export const insertKnowledgeDocumentSchema = createInsertSchema(knowledgeDocumen
 export type InsertKnowledgeDocument = z.infer<typeof insertKnowledgeDocumentSchema>;
 export type KnowledgeDocument = typeof knowledgeDocuments.$inferSelect;
 
+// ─── KNOWLEDGE CHUNKS (RAG embeddings) ───
+// Note: `embedding` column is vector(1536) in Postgres; Drizzle represents it as text
+// here and the RAG service uses parameterized raw SQL for vector operations.
+export const knowledgeChunks = pgTable("knowledge_chunks", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  workspaceId: text("workspace_id").notNull().default("default").references(() => workspaces.id),
+  documentId: integer("document_id").notNull().references(() => knowledgeDocuments.id, { onDelete: "cascade" }),
+  chunkIndex: integer("chunk_index").notNull(),
+  content: text("content").notNull(),
+  tokenCount: integer("token_count"),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [
+  index("knowledge_chunks_doc_idx").on(t.documentId),
+  index("knowledge_chunks_ws_idx").on(t.workspaceId),
+]);
+export const insertKnowledgeChunkSchema = createInsertSchema(knowledgeChunks).omit({ createdAt: true });
+export type InsertKnowledgeChunk = z.infer<typeof insertKnowledgeChunkSchema>;
+export type KnowledgeChunk = typeof knowledgeChunks.$inferSelect;
+
 // ─── WEBHOOKS (outbound event subscriptions) ───
 export const webhooks = pgTable("webhooks", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
