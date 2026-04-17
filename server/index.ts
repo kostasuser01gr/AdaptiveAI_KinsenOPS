@@ -62,7 +62,7 @@ export function log(message: string, source = "express") {
     shutdown().catch(() => process.exit(1));
   });
 
-  if (config.isProduction) {
+  if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite.js");
