@@ -3,9 +3,11 @@
  * Full layout with filter bar, grid widgets, insights, and drill-down capability.
  */
 import React, { useState, useCallback } from "react";
-import { Responsive, WidthProvider } from "react-grid-layout/legacy";
+import ReactGridLayout, { Responsive } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
+import "react-resizable/css/styles.css";
 
+const WidthProvider = (ReactGridLayout as any).WidthProvider || ((c: any) => c);
 const ResponsiveGridLayout = WidthProvider(Responsive);
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import {
   X, Sparkles, Info, AlertTriangle, CheckCircle2,
-  Maximize2, Minimize2,
+  Pin, Share2, Maximize2, Minimize2,
 } from "lucide-react";
 import { UIBlockRenderer } from "./UIBlockRenderer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -61,7 +63,7 @@ interface GenerativeViewRendererProps {
   onDrillDown?: (prompt: string) => void;
 }
 
-function InsightIcon({ severity }: { icon?: string; severity?: string }) {
+function InsightIcon({ icon, severity }: { icon?: string; severity?: string }) {
   if (severity === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0" />;
   if (severity === "success") return <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0" />;
   return <Info className="h-4 w-4 text-blue-500 shrink-0" />;
