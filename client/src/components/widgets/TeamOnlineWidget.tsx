@@ -4,7 +4,7 @@ import { Users, Circle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { WidgetProps } from './index';
 
-export default function TeamOnlineWidget({ config: _config }: WidgetProps) {
+export default function TeamOnlineWidget({ config }: WidgetProps) {
   const { data: users = [] } = useQuery<any[]>({
     queryKey: ['/api/users'],
     queryFn: getQueryFn({ on401: 'returnNull' }),

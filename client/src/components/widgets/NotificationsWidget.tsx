@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from '@/lib/queryClient';
 import { Bell, CheckCheck } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/lib/useAuth';
 import type { WidgetProps } from './index';
 
-export default function NotificationsWidget({ config: _config }: WidgetProps) {
+export default function NotificationsWidget({ config }: WidgetProps) {
   const { user } = useAuth();
   const { data: notifications = [] } = useQuery<any[]>({
     queryKey: ['/api/notifications'],

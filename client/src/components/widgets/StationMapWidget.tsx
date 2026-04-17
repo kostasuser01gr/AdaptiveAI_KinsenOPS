@@ -3,7 +3,7 @@ import { getQueryFn } from '@/lib/queryClient';
 import { MapPin } from 'lucide-react';
 import type { WidgetProps } from './index';
 
-export default function StationMapWidget({ config: _config }: WidgetProps) {
+export default function StationMapWidget({ config }: WidgetProps) {
   const { data: stations = [] } = useQuery<any[]>({
     queryKey: ['/api/stations'],
     queryFn: getQueryFn({ on401: 'returnNull' }),

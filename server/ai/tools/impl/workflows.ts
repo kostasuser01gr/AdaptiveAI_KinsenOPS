@@ -11,7 +11,7 @@ import {
   cancelWorkflow,
   type WorkflowState,
 } from "../../workflows/engine.js";
-import type { ToolContext } from "../types.js";
+import type { ToolResult, ToolContext } from "../types.js";
 
 // In-memory workflow state per user session (conversation-scoped).
 // In production this would be persisted in conversation metadata.

@@ -3,17 +3,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Car, Users, Droplets, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { CalendarDays, Car, Users, Droplets, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const _HOURS = Array.from({ length: 14 }, (_, i) => i + 6);
 
 export default function CalendarPage() {
-  const { data: shiftsData, isLoading: loadingShifts } = useQuery({ queryKey: ["/api/shifts"] });
-  const { data: washData, isLoading: loadingWash } = useQuery({ queryKey: ["/api/wash-queue"] });
-  const { data: vehiclesData, isLoading: loadingVehicles } = useQuery({ queryKey: ["/api/vehicles"] });
-  const { data: reservationsData, isLoading: loadingRes } = useQuery({ queryKey: ["/api/reservations"] });
-  const isLoading = loadingShifts || loadingWash || loadingVehicles || loadingRes;
+  const { data: shiftsData } = useQuery({ queryKey: ["/api/shifts"] });
+  const { data: washData } = useQuery({ queryKey: ["/api/wash-queue"] });
+  const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
+  const { data: reservationsData } = useQuery({ queryKey: ["/api/reservations"] });
 
   const shifts = Array.isArray(shiftsData) ? shiftsData : [];
   const washes = Array.isArray(washData) ? washData : [];
@@ -69,14 +68,6 @@ export default function CalendarPage() {
     }
     return events;
   }, [reservationsList, vehicles, weekDates]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col h-full bg-background">

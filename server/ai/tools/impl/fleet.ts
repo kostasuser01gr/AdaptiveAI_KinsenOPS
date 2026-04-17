@@ -4,7 +4,7 @@
 import { z } from "zod/v4";
 import { toolRegistry } from "../registry.js";
 import { storage } from "../../../storage.js";
-import type { ToolResult } from "../types.js";
+import type { ToolResult, ToolContext } from "../types.js";
 
 // ─── List Vehicles ───
 toolRegistry.register({
@@ -14,7 +14,7 @@ toolRegistry.register({
     status: z.string().optional().describe("Filter by status: ready, washing, maintenance, out_of_service"),
     limit: z.number().optional().describe("Max results to return (default 20)"),
   }),
-  async handler(input, _ctx): Promise<ToolResult> {
+  async handler(input, ctx): Promise<ToolResult> {
     const vehicles = await storage.getVehicles();
     let filtered = vehicles;
     if (input.status) {
@@ -62,7 +62,7 @@ toolRegistry.register({
     vehicleId: z.number().optional().describe("The vehicle ID"),
     plate: z.string().optional().describe("The vehicle plate number"),
   }),
-  async handler(input, _ctx): Promise<ToolResult> {
+  async handler(input, ctx): Promise<ToolResult> {
     let vehicle;
     if (input.vehicleId) {
       vehicle = await storage.getVehicle(input.vehicleId as number);
@@ -105,13 +105,13 @@ toolRegistry.register({
     status: z.enum(["ready", "washing", "maintenance", "out_of_service"]).describe("New status"),
   }),
   requiredRole: "coordinator",
-  async handler(input, _ctx): Promise<ToolResult> {
+  async handler(input, ctx): Promise<ToolResult> {
     const vehicle = await storage.getVehicle(input.vehicleId as number);
     if (!vehicle) {
       return { content: "Vehicle not found.", isError: true };
     }
     const updated = await storage.updateVehicle(input.vehicleId as number, {
-      status: input.status as typeof import("../../../../shared/schema.js").VEHICLE_STATUSES[number],
+      status: input.status as string,
     });
     return {
       content: `Updated vehicle ${updated.plate} status from "${vehicle.status}" to "${updated.status}".`,
@@ -131,7 +131,7 @@ toolRegistry.register({
   name: "fleet_summary",
   description: "Get a summary of the entire fleet: total vehicles, counts by status, and readiness percentage. Use for dashboard or overview questions.",
   inputSchema: z.object({}),
-  async handler(_input, _ctx): Promise<ToolResult> {
+  async handler(_input, ctx): Promise<ToolResult> {
     const vehicles = await storage.getVehicles();
     const byStatus: Record<string, number> = {};
     for (const v of vehicles) {

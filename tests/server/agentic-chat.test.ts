@@ -2,7 +2,7 @@
  * Agentic Chat Integration Tests
  * Verifies tool registry, orchestrator SSE events, and type contracts.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Tool Registry ───────────────────────────────────────────────
 

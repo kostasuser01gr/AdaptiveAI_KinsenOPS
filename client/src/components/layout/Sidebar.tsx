@@ -1,5 +1,5 @@
 import React from 'react';
-import { motion } from '@/lib/animations';
+import { motion, AnimatePresence } from '@/lib/animations';
 import { useApp } from '@/lib/AppContext';
 import { useAuth } from '@/lib/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -20,7 +20,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { usePageLayout } from "@/hooks/useLayoutPreferences";
-import { hasMinRole } from "../../../../shared/roles";
+import { ROLE_HIERARCHY, hasMinRole } from "../../../../shared/roles";
 const ROLE_COLORS: Record<string, string> = {
   admin: 'bg-red-500/20 text-red-400 border-red-500/30',
   supervisor: 'bg-amber-500/20 text-amber-400 border-amber-500/30',

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { WidgetProps } from './index';
 
-export default function AnomalyWidget({ config: _config }: WidgetProps) {
+export default function AnomalyWidget({ config }: WidgetProps) {
   const { data: anomalies = [] } = useQuery<any[]>({
     queryKey: ['/api/anomalies'],
     queryFn: getQueryFn({ on401: 'returnNull' }),

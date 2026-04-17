@@ -99,7 +99,7 @@ export default function FleetPage() {
   const [search, setSearch] = React.useState('');
   const [statusFilter, setStatusFilter] = React.useState('all');
   const [selectedVehicleId, setSelectedVehicleId] = React.useState<number | null>(null);
-  const [_newVehicle, _setNewVehicle] = React.useState({ plate: '', model: '', category: 'B', status: 'ready', sla: 'normal', nextBooking: '', timerInfo: '-' });
+  const [newVehicle, setNewVehicle] = React.useState({ plate: '', model: '', category: 'B', status: 'ready', sla: 'normal', nextBooking: '', timerInfo: '-' });
   const vehicleForm = useForm<AddVehicleValues>({
     resolver: zodResolver(addVehicleSchema),
     defaultValues: { plate: '', model: '', category: 'B', status: 'ready', sla: 'normal' },

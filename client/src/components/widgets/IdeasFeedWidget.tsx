@@ -13,7 +13,7 @@ const statusColor: Record<string, string> = {
   rejected: 'bg-red-500/10 text-red-600',
 };
 
-export default function IdeasFeedWidget({ config: _config }: WidgetProps) {
+export default function IdeasFeedWidget({ config }: WidgetProps) {
   const [, navigate] = useLocation();
   const { data: proposals = [] } = useQuery<any[]>({
     queryKey: ['/api/ideas'],

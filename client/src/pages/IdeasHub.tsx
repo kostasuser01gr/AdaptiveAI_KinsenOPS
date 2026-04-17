@@ -15,7 +15,7 @@ import { Separator } from '@/components/ui/separator';
 import { Empty, EmptyContent, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import {
   Lightbulb, Plus, MessageSquare, ArrowUp, Filter, Clock, CheckCircle2, XCircle,
-  Sparkles, Layers, Workflow, Puzzle, Bug
+  Sparkles, Wrench, Layers, Workflow, Puzzle, Bug
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -39,7 +39,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
 const categories = ['general', 'feature', 'ui', 'workflow', 'integration', 'bug'];
 
 export default function IdeasHub() {
-  const { user: _user } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [filterCategory, setFilterCategory] = useState('all');
@@ -66,7 +66,7 @@ export default function IdeasHub() {
 
   const createIdea = useMutation({
     mutationFn: (data: { label: string; description: string; category: string; type: string }) =>
-      apiRequest('POST', '/api/proposals', { ...data, payload: {} }),
+      apiRequest('POST', '/api/workspace-proposals', data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['/api/ideas'] });
       setShowNewIdea(false);

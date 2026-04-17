@@ -64,7 +64,7 @@ export default function ImportsPage() {
       try {
         await apiRequest('POST', `/api/imports/${data.id}/process`);
         queryClient.invalidateQueries({ queryKey: ['/api/imports'] });
-      } catch (_err) {
+      } catch (err) {
         toast({ title: "Processing Failed", description: "Import was created but processing failed. You can retry from the import detail view.", variant: "destructive" });
       }
     },

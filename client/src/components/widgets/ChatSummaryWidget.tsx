@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import type { WidgetProps } from './index';
 
-export default function ChatSummaryWidget({ config: _config }: WidgetProps) {
+export default function ChatSummaryWidget({ config }: WidgetProps) {
   const [, navigate] = useLocation();
   const [message, setMessage] = useState('');
 

@@ -4,11 +4,14 @@ import { WidgetShell } from '@/components/widgets/WidgetShell';
 import { PageShell } from '@/components/PageShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { MotionDialog } from '@/components/motion/MotionDialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  LayoutGrid, Plus, X, Package,
+  LayoutGrid, Plus, X, GripVertical, Pencil, Package, Trash2,
   LayoutDashboard, Car, Activity, BarChart3, MessageSquare, Box
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -34,9 +37,9 @@ const tabTemplates = [
 
 export default function Workspace() {
   const { toast } = useToast();
-  const { tabs, createTab, updateTab, deleteTab, reorderTabs: _reorderTabs } = useUserTabs();
+  const { tabs, createTab, updateTab, deleteTab, reorderTabs } = useUserTabs();
   const [activeTabId, setActiveTabId] = useState<number | null>(null);
-  const { widgets: tabWidgets, addWidget, removeWidget: _removeWidget, saveLayout } = useTabWidgets(activeTabId);
+  const { widgets: tabWidgets, addWidget, removeWidget, saveLayout } = useTabWidgets(activeTabId);
   const { catalog } = useWidgetCatalog();
   const [showAddTab, setShowAddTab] = useState(false);
   const [newTabLabel, setNewTabLabel] = useState('');
@@ -55,7 +58,7 @@ export default function Workspace() {
       // If template selected, auto-add widgets
       const tmpl = tabTemplates.find(t => t.template === newTabTemplate);
       if (tmpl && result && 'id' in result) {
-        const _newTabId = (result as any).id;
+        const newTabId = (result as any).id;
         for (let i = 0; i < tmpl.widgets.length; i++) {
           const slug = tmpl.widgets[i];
           const def = catalog.find(c => c.slug === slug);

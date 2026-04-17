@@ -15,7 +15,7 @@ const ENCRYPTION_KEY = (() => {
     if (config.isProduction) {
       throw new Error('API_KEY_ENCRYPTION_SECRET or SESSION_SECRET must be set in production');
     }
-     
+    // eslint-disable-next-line no-console
     console.warn('[SECURITY] Using insecure default API key encryption key — set API_KEY_ENCRYPTION_SECRET in production');
     return crypto.scryptSync('dev-only-default-key-change-in-prod', 'driveai-api-key-salt', 32);
   }

@@ -5,14 +5,14 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import type { WidgetProps } from './index';
 
-export default function ShiftOverviewWidget({ config: _config }: WidgetProps) {
+export default function ShiftOverviewWidget({ config }: WidgetProps) {
   const { data: shifts = [] } = useQuery<any[]>({
     queryKey: ['/api/shifts'],
     queryFn: getQueryFn({ on401: 'returnNull' }),
   });
 
   const published = shifts.filter((s: any) => s.status === 'published');
-  const _today = new Date().toLocaleDateString('en-CA');
+  const today = new Date().toLocaleDateString('en-CA');
 
   return (
     <ScrollArea className="h-full">

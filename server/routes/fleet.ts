@@ -108,7 +108,7 @@ export function registerFleetRoutes(app: Express) {
               await storage.updateDowntimeEvent(openDowntime.id, { endedAt: new Date() });
             }
             // Restore vehicle to available
-            await storage.updateVehicle(existing.vehicleId, { status: 'ready' });
+            await storage.updateVehicle(existing.vehicleId, { status: 'available' });
           }
         } else if (data.status === 'cancelled' && existing.vehicleId) {
           // Cancel associated downtime
@@ -117,7 +117,7 @@ export function registerFleetRoutes(app: Express) {
           if (openDowntime) {
             await storage.updateDowntimeEvent(openDowntime.id, { endedAt: new Date() });
           }
-          await storage.updateVehicle(existing.vehicleId, { status: 'ready' });
+          await storage.updateVehicle(existing.vehicleId, { status: 'available' });
         }
 
         const result = await storage.updateRepairOrder(id, updateData);

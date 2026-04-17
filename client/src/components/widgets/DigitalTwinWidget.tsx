@@ -3,7 +3,7 @@ import { getQueryFn } from '@/lib/queryClient';
 import { Layers } from 'lucide-react';
 import type { WidgetProps } from './index';
 
-export default function DigitalTwinWidget({ config: _config }: WidgetProps) {
+export default function DigitalTwinWidget({ config }: WidgetProps) {
   const { data: snapshots = [] } = useQuery<any[]>({
     queryKey: ['/api/digital-twin/snapshots'],
     queryFn: getQueryFn({ on401: 'returnNull' }),

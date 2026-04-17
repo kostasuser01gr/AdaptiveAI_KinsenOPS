@@ -4,6 +4,7 @@
  * The AI recognises workflow-triggering intents and calls workflow tools
  * to advance through steps.
  */
+import { z } from "zod/v4";
 import type { UIBlock, ToolResult, ToolContext } from "../tools/types.js";
 
 // ─── Workflow types ──────────────────────────────────────────────
@@ -57,7 +58,7 @@ export function allWorkflows(): WorkflowDefinition[] {
 // ─── Engine functions ────────────────────────────────────────────
 
 /** Start a new workflow. Returns the initial UIBlock + timeline. */
-export function startWorkflow(workflowId: string, _ctx: ToolContext): { state: WorkflowState; result: ToolResult } | null {
+export function startWorkflow(workflowId: string, ctx: ToolContext): { state: WorkflowState; result: ToolResult } | null {
   const def = workflows.get(workflowId);
   if (!def) return null;
 

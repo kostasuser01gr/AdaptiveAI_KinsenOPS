@@ -4,7 +4,7 @@
 import { z } from "zod/v4";
 import { toolRegistry } from "../registry.js";
 import { storage } from "../../../storage.js";
-import type { ToolResult } from "../types.js";
+import type { ToolResult, ToolContext } from "../types.js";
 
 // ─── Notifications ───
 toolRegistry.register({

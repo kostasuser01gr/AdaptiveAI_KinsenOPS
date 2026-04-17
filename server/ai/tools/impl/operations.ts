@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { toolRegistry } from "../registry.js";
 import { storage } from "../../../storage.js";
 import type { ToolResult } from "../types.js";
-import { calculateWashPriorityScore } from "../../../businessRules.js";
+import { calculateWashPriorityScore, calculateSlaDeadline } from "../../../businessRules.js";
 
 // ─── Wash Queue ───
 toolRegistry.register({

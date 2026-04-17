@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
-  Car, Droplets, CalendarDays, AlertTriangle,
+  Car, Droplets, CalendarDays, Users, AlertTriangle, Clock,
   Activity, TrendingUp, ArrowRight, Shield, Gauge, CheckCircle2,
   XCircle, Timer, Wrench, LayoutDashboard
 } from 'lucide-react';

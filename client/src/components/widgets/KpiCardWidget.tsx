@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from '@/lib/queryClient';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { WidgetProps } from './index';
 
 export default function KpiCardWidget({ config }: WidgetProps) {

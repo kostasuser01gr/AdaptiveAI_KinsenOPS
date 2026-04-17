@@ -67,15 +67,28 @@ ALTER TABLE stations DROP CONSTRAINT IF EXISTS stations_code_key;
 ALTER TABLE vehicles DROP CONSTRAINT IF EXISTS vehicles_plate_key;
 ALTER TABLE module_registry DROP CONSTRAINT IF EXISTS module_registry_slug_key;
 ALTER TABLE workspace_config DROP CONSTRAINT IF EXISTS workspace_config_key_key;
-ALTER TABLE kpi_definitions DROP CONSTRAINT IF EXISTS kpi_definitions_slug_key;
 
--- Re-create the per-workspace unique indexes (idempotent, already exist from prior migration)
-CREATE UNIQUE INDEX IF NOT EXISTS users_ws_username_idx ON users (workspace_id, username);
-CREATE UNIQUE INDEX IF NOT EXISTS stations_ws_code_idx ON stations (workspace_id, code);
-CREATE UNIQUE INDEX IF NOT EXISTS vehicles_ws_plate_idx ON vehicles (workspace_id, plate);
-CREATE UNIQUE INDEX IF NOT EXISTS module_registry_ws_slug_idx ON module_registry (workspace_id, slug);
-CREATE UNIQUE INDEX IF NOT EXISTS workspace_config_ws_key_idx ON workspace_config (workspace_id, key);
-CREATE UNIQUE INDEX IF NOT EXISTS kpi_definitions_ws_slug_idx ON kpi_definitions (workspace_id, slug);
+-- kpi_definitions and workspace_id columns may not exist yet (created in later migrations).
+-- Guard with DO blocks so the migration is safe regardless of ordering.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'kpi_definitions') THEN
+    ALTER TABLE kpi_definitions DROP CONSTRAINT IF EXISTS kpi_definitions_slug_key;
+  END IF;
+END $$;
+
+-- Re-create the per-workspace unique indexes (only if workspace_id column exists)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'workspace_id') THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS users_ws_username_idx ON users (workspace_id, username);
+    CREATE UNIQUE INDEX IF NOT EXISTS stations_ws_code_idx ON stations (workspace_id, code);
+    CREATE UNIQUE INDEX IF NOT EXISTS vehicles_ws_plate_idx ON vehicles (workspace_id, plate);
+    CREATE UNIQUE INDEX IF NOT EXISTS module_registry_ws_slug_idx ON module_registry (workspace_id, slug);
+    CREATE UNIQUE INDEX IF NOT EXISTS workspace_config_ws_key_idx ON workspace_config (workspace_id, key);
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'kpi_definitions') THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS kpi_definitions_ws_slug_idx ON kpi_definitions (workspace_id, slug);
+  END IF;
+END $$;
 
 -- ─── 4. Add missing wash_queue.sla_deadline column ───
 

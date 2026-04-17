@@ -127,7 +127,7 @@ export default function ChannelsPage() {
   const { lastMessage, send: wsSend } = useWebSocket(wsChannels);
 
   const queryClient = useQueryClient();
-  const { data: channels, isLoading: loadingChannels } = useQuery<Channel[]>({
+  const { data: channels } = useQuery<Channel[]>({
     queryKey: ["/api/channels"],
   });
 
@@ -235,12 +235,7 @@ export default function ChannelsPage() {
                 ))}
               </div>
             ))}
-            {loadingChannels && (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              </div>
-            )}
-            {!loadingChannels && filteredChannels.length === 0 && (
+            {filteredChannels.length === 0 && (
               <p className="px-3 py-8 text-xs text-muted-foreground text-center" data-testid="text-no-channels">
                 {searchQuery ? 'No channels match your search' : 'No channels yet. Create one!'}
               </p>

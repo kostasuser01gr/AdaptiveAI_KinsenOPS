@@ -12,7 +12,7 @@ const statusColor: Record<string, string> = {
   cancelled: 'bg-red-500/10 text-red-600',
 };
 
-export default function ReservationsWidget({ config: _config }: WidgetProps) {
+export default function ReservationsWidget({ config }: WidgetProps) {
   const { data: reservations = [] } = useQuery<any[]>({
     queryKey: ['/api/reservations'],
     queryFn: getQueryFn({ on401: 'returnNull' }),

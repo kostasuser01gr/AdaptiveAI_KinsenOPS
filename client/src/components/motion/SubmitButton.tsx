@@ -1,3 +1,4 @@
+import { motion } from '@/lib/animations';
 import { Button } from '@/components/ui/button';
 import { SuccessCheck } from './SuccessCheck';
 import { Loader2 } from 'lucide-react';

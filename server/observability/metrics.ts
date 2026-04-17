@@ -120,7 +120,7 @@ class MetricsCollector {
       if (!counter) return 0;
       return (counter as unknown as { hashMap: Record<string, { value: number }> }).hashMap?.[""]?.value ?? 0;
     },
-    set(_target, prop: string, _value: number) {
+    set(_target, prop: string, value: number) {
       const counter = week1Counters[prop as keyof typeof week1Counters];
       if (counter) counter.inc();
       return true;

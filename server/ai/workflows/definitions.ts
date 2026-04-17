@@ -4,7 +4,7 @@
  */
 import { registerWorkflow } from "./engine.js";
 import { storage } from "../../storage.js";
-import type { UIBlock } from "../tools/types.js";
+import type { UIBlock, ToolResult, ToolContext } from "../tools/types.js";
 
 // ─── Vehicle Onboard ─────────────────────────────────────────────
 

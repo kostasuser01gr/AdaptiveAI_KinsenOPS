@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { requireAuth } from "../auth.js";
 import { insertUserTabSchema, insertTabWidgetSchema } from "../../shared/schema.js";
+import { validateRequest } from "../middleware/validation.js";
 
 export function registerTabWidgetRoutes(app: Express) {
   // ─── USER TABS ───

@@ -12,7 +12,7 @@ const severityColor: Record<string, string> = {
   critical: 'bg-red-500/10 text-red-600',
 };
 
-export default function IncidentsWidget({ config: _config }: WidgetProps) {
+export default function IncidentsWidget({ config }: WidgetProps) {
   const { data: incidents = [] } = useQuery<any[]>({
     queryKey: ['/api/incidents'],
     queryFn: getQueryFn({ on401: 'returnNull' }),

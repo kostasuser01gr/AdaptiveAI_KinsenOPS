@@ -42,7 +42,7 @@ class DomainEventBus {
 
       this.ready = true;
       logger.info("EventBus: Redis pub/sub connected");
-    } catch (_connectErr) {
+    } catch (connectErr) {
       logger.warn("EventBus: Redis pub/sub failed — falling back to local-only");
       this.pub = null;
       this.sub = null;

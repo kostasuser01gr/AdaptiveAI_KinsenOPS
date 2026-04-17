@@ -222,14 +222,14 @@ export function registerImportRoutes(app: Express) {
               await storage.updateVehicle(match.id, {
                 model: mapped.model ? String(mapped.model) : undefined,
                 category: mapped.category ? String(mapped.category) : undefined,
-                status: mapped.status ? String(mapped.status) as typeof import("../../shared/schema.js").VEHICLE_STATUSES[number] : undefined,
+                status: mapped.status ? String(mapped.status) : undefined,
               });
             } else {
               const newVehicle = await storage.createVehicle({
                 plate: String(mapped.plate),
                 model: String(mapped.model),
                 category: mapped.category ? String(mapped.category) : 'B',
-                status: mapped.status ? String(mapped.status) as typeof import("../../shared/schema.js").VEHICLE_STATUSES[number] : 'ready',
+                status: mapped.status ? String(mapped.status) : 'ready',
                 sla: 'normal',
               });
               vehicleByPlate.set(newVehicle.plate, newVehicle);

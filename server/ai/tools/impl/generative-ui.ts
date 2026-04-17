@@ -5,6 +5,7 @@
  */
 import { z } from "zod/v4";
 import { toolRegistry } from "../registry.js";
+import { storage } from "../../../storage.js";
 import type { ToolResult, ToolContext, UIBlock } from "../types.js";
 
 // Helper to emit pipeline progress events

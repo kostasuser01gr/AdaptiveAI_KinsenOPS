@@ -173,7 +173,6 @@ class WebSocketManager {
 
   private async resolveSession(req: IncomingMessage, client: ClientConnection, clientId: string): Promise<void> {
     const secret = config.sessionSecret;
-    // eslint-disable-next-line security/detect-possible-timing-attacks
     if (secret === "dev-secret-not-for-production") return;
 
     const cookieHeader = req.headers.cookie || '';

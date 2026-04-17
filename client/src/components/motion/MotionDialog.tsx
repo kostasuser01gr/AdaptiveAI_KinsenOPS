@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from '@/lib/animations';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogOverlay } from '@/components/ui/dialog';
 import * as RadixDialog from '@radix-ui/react-dialog';
 import React from 'react';
 

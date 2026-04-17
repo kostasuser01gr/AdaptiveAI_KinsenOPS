@@ -1,4 +1,4 @@
-import { db, eq, and, wsFilter, wsInsert } from "./base.js";
+import { db, eq, desc, and, wsFilter, wsInsert } from "./base.js";
 import {
   userTabs, type InsertUserTab,
   widgetDefinitions, type InsertWidgetDefinition,

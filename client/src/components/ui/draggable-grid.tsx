@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import ReactGridLayout, { WidthProvider } from 'react-grid-layout/legacy';
+import ReactGridLayout from 'react-grid-layout';
 
 interface Layout {
   i: string;
@@ -14,7 +14,9 @@ import { GripVertical, RotateCcw, Lock, Unlock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
 
+const WidthProvider = (ReactGridLayout as any).WidthProvider || ((c: any) => c);
 const GridLayout = WidthProvider(ReactGridLayout);
 
 export interface GridWidget {

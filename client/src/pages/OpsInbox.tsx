@@ -75,8 +75,9 @@ export default function OpsInboxPage() {
 
   const actionMutation = useMutation({
     mutationFn: async ({ id, action }: { id: number; action: string }) => {
-      await apiRequest("POST", `/api/notifications/${id}/action`, {
-        action: action === 'resolve' ? 'resolve' : action === 'dismiss' ? 'dismiss' : 'acknowledge',
+      await apiRequest("PATCH", `/api/notifications/${id}`, {
+        metadata: { actionTaken: action, actionBy: user?.id, actionAt: new Date().toISOString() },
+        status: 'resolved',
       });
     },
     onSuccess: (_data, variables) => {

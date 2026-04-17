@@ -13,7 +13,7 @@ import type { Request, Response, NextFunction } from "express";
 import { randomBytes, timingSafeEqual } from "crypto";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-const EXEMPT_PREFIXES = ["/api/public/", "/healthz", "/api/webhooks/", "/api/client-errors"];
+const EXEMPT_PREFIXES = ["/api/public/", "/healthz", "/api/webhooks/"];
 const COOKIE_NAME = "csrf-token";
 const HEADER_NAME = "x-csrf-token";
 
@@ -52,7 +52,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
 
   // Safe methods and exempt paths skip validation
   if (SAFE_METHODS.has(req.method)) return next();
-  if (EXEMPT_PREFIXES.some((p) => req.originalUrl.startsWith(p) || req.path.startsWith(p))) return next();
+  if (EXEMPT_PREFIXES.some((p) => req.path.startsWith(p))) return next();
 
   const cookieToken = getCookie(req, COOKIE_NAME);
   const headerToken = req.get(HEADER_NAME);

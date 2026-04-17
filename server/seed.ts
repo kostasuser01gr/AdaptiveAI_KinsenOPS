@@ -42,7 +42,7 @@ export async function seedDatabase() {
   await storage.createStation({ name: "Heraklion", code: "HER-01", address: "Heraklion Airport", timezone: "Europe/Athens", active: true });
 
   await storage.createVehicle({ plate: "YHA-1234", model: "Peugeot 208", category: "B", status: "washing", sla: "normal", nextBooking: "14:00 Today", timerInfo: "15m remaining", stationId: 1, mileage: 34200, fuelLevel: 75 });
-  await storage.createVehicle({ plate: "ZXC-9876", model: "Nissan Qashqai", category: "C", status: "rented", sla: "high", nextBooking: "12:30 Today (LATE)", timerInfo: "Overdue by 2h", stationId: 1, mileage: 56100, fuelLevel: 30 });
+  await storage.createVehicle({ plate: "ZXC-9876", model: "Nissan Qashqai", category: "C", status: "returned", sla: "high", nextBooking: "12:30 Today (LATE)", timerInfo: "Overdue by 2h", stationId: 1, mileage: 56100, fuelLevel: 30 });
   await storage.createVehicle({ plate: "BAM-4455", model: "VW Golf", category: "B", status: "maintenance", sla: "low", nextBooking: "None", timerInfo: "Est. 2 days", stationId: 2, mileage: 89400, fuelLevel: 50 });
   await storage.createVehicle({ plate: "KLO-1122", model: "Toyota Yaris", category: "A", status: "ready", sla: "normal", nextBooking: "Tomorrow 09:00", timerInfo: "-", stationId: 1, mileage: 12300, fuelLevel: 95 });
   await storage.createVehicle({ plate: "PLM-7788", model: "BMW 320i", category: "D", status: "ready", sla: "premium", nextBooking: "Today 16:00", timerInfo: "-", stationId: 3, mileage: 28700, fuelLevel: 80 });

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, AlertTriangle, Car, Users, Droplets, TrendingUp, Clock, MapPin, Shield, Zap, RefreshCw, History } from 'lucide-react';
-import { PulseOnChange } from '@/components/motion';
+import { CountUp, PulseOnChange } from '@/components/motion';
 import { StatCard } from '@/components/StatCard';
 
 function RiskBadge({ level }: { level: string }) {

@@ -5,7 +5,8 @@
 import { z } from "zod/v4";
 import { toolRegistry } from "../registry.js";
 import { storage } from "../../../storage.js";
-import type { ToolResult } from "../types.js";
+import type { ToolResult, ToolContext } from "../types.js";
+import { getWorkspaceScope } from "../../../middleware/workspaceContext.js";
 
 // ─── Wash Queue: Create ───
 toolRegistry.register({
@@ -381,7 +382,7 @@ toolRegistry.register({
   async handler(input, ctx): Promise<ToolResult> {
     const vehicle = await storage.getVehicle(input.vehicleId as number);
     if (!vehicle) return { content: "Vehicle not found.", isError: true };
-    const _event = await storage.createDowntimeEvent({
+    const event = await storage.createDowntimeEvent({
       workspaceId: ctx.workspaceId,
       vehicleId: input.vehicleId as number,
       reason: input.reason as string,
@@ -538,7 +539,7 @@ toolRegistry.register({
   }),
   requiredRole: "coordinator",
   async handler(input, ctx): Promise<ToolResult> {
-    const _notif = await storage.createNotification({
+    const notif = await storage.createNotification({
       workspaceId: ctx.workspaceId,
       title: input.title as string,
       body: input.message as string,

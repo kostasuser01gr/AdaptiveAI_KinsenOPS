@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getQueryFn } from '@/lib/queryClient';
 import { Car, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import type { WidgetProps } from './index';
 
 const statusColors: Record<string, string> = {
@@ -16,7 +17,7 @@ const statusIcons: Record<string, React.ReactNode> = {
   damaged: <AlertTriangle className="h-3.5 w-3.5" />,
 };
 
-export default function FleetStatusWidget({ config: _config }: WidgetProps) {
+export default function FleetStatusWidget({ config }: WidgetProps) {
   const { data: vehicles = [] } = useQuery<any[]>({
     queryKey: ['/api/vehicles'],
     queryFn: getQueryFn({ on401: 'returnNull' }),

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import type { WidgetProps } from './index';
 
-export default function WashQueueWidget({ config: _config }: WidgetProps) {
+export default function WashQueueWidget({ config }: WidgetProps) {
   const { data: queue = [] } = useQuery<any[]>({
     queryKey: ['/api/wash-queue'],
     queryFn: getQueryFn({ on401: 'returnNull' }),
