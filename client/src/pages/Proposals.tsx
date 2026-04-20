@@ -12,7 +12,10 @@ import {
   FileCheck, Clock, CheckCircle2, XCircle, Undo2, Play,
   Filter, Loader2, ChevronDown, Shield, User, AlertTriangle,
 } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/use-toast';
+import { useSearchParam } from '@/hooks/useSearchParam';
+import { ProposalPreview } from '@/components/proposals/ProposalPreview';
 
 interface Proposal {
   id: number;
@@ -51,9 +54,10 @@ export default function ProposalsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useSearchParam('status', 'all');
   const [reviewNote, setReviewNote] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ type: 'apply' | 'revert'; id: number; title: string } | null>(null);
 
   const isReviewer = user?.role === 'admin' || user?.role === 'supervisor';
 
@@ -173,8 +177,12 @@ export default function ProposalsPage() {
               return (
                 <Card key={p.id} className="overflow-hidden">
                   <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
                     className="flex items-start gap-3 p-4 cursor-pointer hover:bg-accent/30 transition-colors"
                     onClick={() => setExpandedId(isExpanded ? null : p.id)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpandedId(isExpanded ? null : p.id); } }}
                   >
                     <div className={`mt-0.5 flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${sc.color}`}>
                       {sc.icon}
@@ -218,6 +226,20 @@ export default function ProposalsPage() {
                             {JSON.stringify(p.previousValue, null, 2)}
                           </pre>
                         </div>
+                      )}
+
+                      {/* Visual preview diff */}
+                      {(p.status === 'proposed' || p.status === 'approved') && (
+                        <ProposalPreview
+                          payload={p.payload}
+                          previousValue={p.previousValue}
+                          type={p.type}
+                          onApply={
+                            (p.status === 'approved' || (p.status === 'proposed' && p.scope === 'personal' && p.impact !== 'high'))
+                              ? () => setConfirmAction({ type: 'apply', id: p.id, title: p.label })
+                              : undefined
+                          }
+                        />
                       )}
 
                       {p.reviewNote && (
@@ -272,7 +294,7 @@ export default function ProposalsPage() {
                             variant="outline"
                             className="gap-1 h-8"
                             disabled={applyMutation.isPending}
-                            onClick={() => applyMutation.mutate(p.id)}
+                            onClick={() => setConfirmAction({ type: 'apply', id: p.id, title: p.label })}
                           >
                             {applyMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                             Apply
@@ -286,7 +308,7 @@ export default function ProposalsPage() {
                             variant="outline"
                             className="gap-1 h-8 text-orange-600 hover:text-orange-700"
                             disabled={revertMutation.isPending}
-                            onClick={() => revertMutation.mutate(p.id)}
+                            onClick={() => setConfirmAction({ type: 'revert', id: p.id, title: p.label })}
                           >
                             {revertMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
                             Revert
@@ -312,6 +334,23 @@ export default function ProposalsPage() {
           )}
         </div>
       </ScrollArea>
+      <ConfirmDialog
+        open={!!confirmAction}
+        onOpenChange={(open) => { if (!open) setConfirmAction(null); }}
+        title={confirmAction?.type === 'apply' ? 'Apply this proposal?' : 'Revert this proposal?'}
+        description={confirmAction?.type === 'apply'
+          ? `"${confirmAction?.title}" will be applied to the system configuration.`
+          : `"${confirmAction?.title}" will be reverted to its previous state.`}
+        confirmLabel={confirmAction?.type === 'apply' ? 'Apply' : 'Revert'}
+        variant={confirmAction?.type === 'revert' ? 'destructive' : 'default'}
+        onConfirm={() => {
+          if (confirmAction) {
+            if (confirmAction.type === 'apply') applyMutation.mutate(confirmAction.id);
+            else revertMutation.mutate(confirmAction.id);
+            setConfirmAction(null);
+          }
+        }}
+      />
     </div>
   );
 }

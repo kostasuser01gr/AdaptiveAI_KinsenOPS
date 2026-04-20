@@ -27,7 +27,7 @@ function StationCard({ station, data }: { station: string; data: any }) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-center">
           <div><p className="text-lg font-bold text-green-400">{data.ready}</p><p className="text-[10px] text-muted-foreground">Ready</p></div>
           <div><p className="text-lg font-bold text-blue-400">{data.washing}</p><p className="text-[10px] text-muted-foreground">Washing</p></div>
           <div><p className="text-lg font-bold text-yellow-400">{data.maintenance}</p><p className="text-[10px] text-muted-foreground">Repair</p></div>
@@ -122,7 +122,7 @@ export default function DigitalTwinPage() {
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2" data-testid="text-page-title">
             <Activity className="h-5 w-5 text-primary" /> Digital Twin — Mission Control
           </h1>
-          <p className="text-sm text-muted-foreground">Live operational state, forecasts, and risk intelligence · Updated {lastUpdated}</p>
+          <p className="text-sm text-muted-foreground" aria-live="polite" aria-atomic="true">Live operational state, forecasts, and risk intelligence · Updated {lastUpdated}</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant="outline" className={`gap-1 ${autoRefresh ? 'text-green-400 border-green-400/30' : 'text-muted-foreground'} cursor-pointer`}
@@ -148,7 +148,7 @@ export default function DigitalTwinPage() {
             </TabsList>
 
             <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <StatCard title="Total Fleet" value={totalVehicles} icon={Car} subtitle={`${readyCount} ready`} />
                 <StatCard title="Washing Now" value={washingCount} icon={Droplets} color="text-blue-400" subtitle={`${pendingWashes} queued`} />
                 <StatCard title="Staff Shifts" value={totalShifts} icon={Users} color="text-green-400" subtitle={`${allStations.length} station(s)`} />

@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useAuth } from "@/lib/useAuth";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import {
@@ -134,13 +135,14 @@ export default function ChannelsPage() {
   const channelList = Array.isArray(channels) ? channels : [];
 
   // Filter channels by search
+  const debouncedSearch = useDebouncedValue(searchQuery, 200);
   const filteredChannels = React.useMemo(() => {
-    if (!searchQuery.trim()) return channelList;
-    const q = searchQuery.toLowerCase();
+    if (!debouncedSearch.trim()) return channelList;
+    const q = debouncedSearch.toLowerCase();
     return channelList.filter(c =>
       c.name.toLowerCase().includes(q) || (c.description?.toLowerCase().includes(q))
     );
-  }, [channelList, searchQuery]);
+  }, [channelList, debouncedSearch]);
 
   // Group channels by type
   const groupedChannels = React.useMemo(() => {
@@ -192,7 +194,7 @@ export default function ChannelsPage() {
               <MessageSquare className="h-4 w-4 text-primary" /> Channels
             </h2>
             <div className="flex items-center gap-0.5">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setChanPref('sidebarCollapsed', true)} title="Collapse sidebar">
+              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Collapse sidebar" onClick={() => setChanPref('sidebarCollapsed', true)}>
                 <PanelLeftClose className="h-3.5 w-3.5" />
               </Button>
               <CreateChannelDialog />
@@ -247,7 +249,7 @@ export default function ChannelsPage() {
       {/* ─── Collapsed Sidebar Rail ─── */}
       {sidebarCollapsed && (
         <div className="border-r flex flex-col items-center py-3 px-1 bg-card/30">
-          <Button variant="ghost" size="icon" className="h-8 w-8 mb-2" onClick={() => setChanPref('sidebarCollapsed', false)} title="Show channels">
+          <Button variant="ghost" size="icon" className="h-8 w-8 mb-2" aria-label="Show channels" onClick={() => setChanPref('sidebarCollapsed', false)}>
             <PanelLeft className="h-4 w-4" />
           </Button>
         </div>
@@ -287,6 +289,7 @@ function CreateChannelDialog() {
   const [name, setName] = React.useState('');
   const [type, setType] = React.useState('public');
   const [description, setDescription] = React.useState('');
+  const [nameError, setNameError] = React.useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -308,14 +311,15 @@ function CreateChannelDialog() {
 
   return (
     <>
-      <Button variant="ghost" size="icon" className="h-7 w-7" data-testid="button-create-channel" onClick={() => setOpen(true)}><Plus className="h-4 w-4" /></Button>
+      <Button variant="ghost" size="icon" className="h-7 w-7" data-testid="button-create-channel" onClick={() => setOpen(true)} aria-label="Create channel"><Plus className="h-4 w-4" /></Button>
       <MotionDialog open={open} onOpenChange={setOpen} title="" className="sm:max-w-md">
         <div className="flex items-center gap-2 text-lg font-semibold"><Hash className="h-5 w-5 text-primary" /> Create Channel</div>
         <p className="text-sm text-muted-foreground">Channels organize conversations by topic or team.</p>
         <div className="space-y-4 mt-2">
           <div className="space-y-2">
             <Label>Name</Label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. fleet-updates" data-testid="input-channel-name" />
+            <Input value={name} onChange={e => { setName(e.target.value); if (e.target.value.trim()) setNameError(''); }} onBlur={() => { if (!name.trim()) setNameError('Channel name is required'); }} placeholder="e.g. fleet-updates" data-testid="input-channel-name" className={nameError ? 'border-destructive' : ''} autoFocus />
+            {nameError && <p className="text-xs text-destructive">{nameError}</p>}
           </div>
           <div className="space-y-2">
             <Label>Type</Label>
@@ -391,12 +395,22 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
       const res = await apiRequest("POST", `/api/channels/${channel.id}/messages`, body);
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/channel-messages", channel.id] });
+    onMutate: async (content: string) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/channel-messages", channel.id] });
+      const previous = queryClient.getQueryData(["/api/channel-messages", channel.id]);
+      const optimistic = { id: Date.now(), content, userId: user?.id, displayName: user?.displayName || 'You', createdAt: new Date().toISOString(), reactions: [], pinned: false, replyToId: replyTo?.id ?? null };
+      queryClient.setQueryData(["/api/channel-messages", channel.id], (old: any[] | undefined) => [optimistic, ...(old || [])]);
       setMessage('');
       setReplyTo(null);
+      return { previous };
     },
-    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onError: (err: Error, _content, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/channel-messages", channel.id], context.previous);
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/channel-messages", channel.id] });
+    },
   });
 
   const editMutation = useMutation({
@@ -409,6 +423,7 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
       setEditingId(null);
       setEditContent('');
     },
+    onError: (err: Error) => toast({ title: "Edit failed", description: err.message, variant: "destructive" }),
   });
 
   const pinMutation = useMutation({
@@ -416,10 +431,12 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
       const res = await apiRequest("POST", `/api/channel-messages/${id}/${pinned ? 'pin' : 'unpin'}`);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/channel-messages", channel.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/channel-pins", channel.id] });
+      toast({ title: vars.pinned ? "Message pinned" : "Message unpinned" });
     },
+    onError: (err: Error) => toast({ title: "Pin failed", description: err.message, variant: "destructive" }),
   });
 
   const reactionMutation = useMutation({
@@ -427,6 +444,10 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
       const res = await apiRequest("POST", `/api/channel-messages/${messageId}/reactions`, { emoji });
       return res.json();
     },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/channel-messages", channel.id] });
+    },
+    onError: (err: Error) => toast({ title: "Reaction failed", description: err.message, variant: "destructive" }),
   });
 
   const joinMutation = useMutation({
@@ -438,6 +459,7 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
       queryClient.invalidateQueries({ queryKey: ["/api/channel-members", channel.id] });
       toast({ title: "Joined channel" });
     },
+    onError: (err: Error) => toast({ title: "Join failed", description: err.message, variant: "destructive" }),
   });
 
   const messageList = React.useMemo(() => {
@@ -561,7 +583,7 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* ─── Channel Header ─── */}
         <div className="h-12 border-b flex items-center gap-2 px-3 bg-card/30 shrink-0">
-          <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" onClick={onBack}>
+          <Button variant="ghost" size="icon" className="h-8 w-8 md:hidden" aria-label="Back to channel list" onClick={onBack}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex items-center gap-1.5">
@@ -578,7 +600,7 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
             {pinnedList.length > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Pinned messages">
                     <Pin className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -587,7 +609,7 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
             )}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onToggleMembers}>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onToggleMembers} aria-label={membersOpen ? 'Hide members' : 'Show members'}>
                   {membersOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRight className="h-4 w-4" />}
                 </Button>
               </TooltipTrigger>
@@ -821,7 +843,7 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
                   <span className="text-muted-foreground">Replying to</span>
                   <span className="font-medium text-foreground">{replyTo.displayName}</span>
                   <span className="truncate text-muted-foreground">{replyTo.content}</span>
-                  <Button variant="ghost" size="icon" className="h-5 w-5 ml-auto shrink-0" onClick={() => setReplyTo(null)}>
+                  <Button variant="ghost" size="icon" className="h-5 w-5 ml-auto shrink-0" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
                     <X className="h-3 w-3" />
                   </Button>
                 </motion.div>
@@ -842,7 +864,7 @@ function ChannelMessageArea({ channel, onBack, wsSend, membersOpen, onToggleMemb
               <div className="flex items-center gap-1 shrink-0">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" aria-label="Add emoji">
                       <Smile className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>

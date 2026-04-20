@@ -16,6 +16,7 @@ import { MotionDialog } from "@/components/motion";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Shift } from "@shared/schema";
+import { ShiftDiffView } from '@/components/shifts/ShiftDiffView';
 
 const SHIFT_MANAGERS = ["admin", "coordinator", "supervisor"];
 
@@ -45,16 +46,26 @@ export default function ShiftsPage() {
     },
   });
 
+  const [statusAnnouncement, setStatusAnnouncement] = React.useState('');
+
   const publishMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("POST", `/api/shifts/${id}/publish`, {});
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/shifts"] });
-      toast({ title: "Shift published" });
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/shifts"] });
+      const previous = queryClient.getQueryData(["/api/shifts"]);
+      queryClient.setQueryData(["/api/shifts"], (old: any[] | undefined) =>
+        old?.map((s: any) => s.id === id ? { ...s, status: 'published' } : s)
+      );
+      return { previous };
     },
-    onError: (err: Error) => toast({ title: "Publish failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/shifts"], context.previous);
+      toast({ title: "Publish failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["/api/shifts"] }); toast({ title: "Shift published" }); },
   });
 
   const submitRequestMutation = useMutation({
@@ -74,11 +85,23 @@ export default function ShiftsPage() {
     mutationFn: async ({ id, status, note }: { id: number; status: string; note?: string }) => {
       await apiRequest("PATCH", `/api/shift-requests/${id}/review`, { status, note });
     },
-    onSuccess: () => {
+    onMutate: async ({ id, status }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/shift-requests"] });
+      const previous = queryClient.getQueryData(["/api/shift-requests"]);
+      queryClient.setQueryData(["/api/shift-requests"], (old: any[] | undefined) =>
+        old?.map((r: any) => r.id === id ? { ...r, status } : r)
+      );
+      return { previous };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/shift-requests"], context.previous);
+      toast({ title: "Review failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: (_data, _err, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/shift-requests"] });
       toast({ title: "Request reviewed" });
+      setStatusAnnouncement(`Shift request ${vars.status}`);
     },
-    onError: (err: Error) => toast({ title: "Review failed", description: err.message, variant: "destructive" }),
   });
 
   const rows = shifts || [];
@@ -190,6 +213,9 @@ export default function ShiftsPage() {
             </LockedFeature>
           )}
 
+          {/* U-04: Shift Proposal Diffs — AI-drafted plan reviewed as a visual diff */}
+          {canManage && <ShiftDiffView />}
+
           {isLoading ? (
             <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
           ) : (
@@ -281,6 +307,7 @@ export default function ShiftsPage() {
           )}
         </div>
       </ScrollArea>
+      <div aria-live="polite" aria-atomic="true" className="sr-only">{statusAnnouncement}</div>
     </div>
   );
 }

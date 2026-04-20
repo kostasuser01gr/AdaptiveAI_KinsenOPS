@@ -7,11 +7,14 @@ import { db } from "./db.js";
 import { sql } from "drizzle-orm";
 import { storage } from "./storage.js";
 import { config } from "./config.js";
+import { redis } from "./redis.js";
 import {
   buildWebSocketClientMessage,
   getWebSocketSubscriptionPolicy,
   parseMemberChannelId,
 } from "./websocketPolicy.js";
+
+const REDIS_WS_CHANNEL = "ws:broadcast";
 
 const MAX_SUBSCRIPTIONS_PER_CLIENT = 100;
 const WS_MSG_RATE_WINDOW_MS = 10_000;
@@ -65,6 +68,7 @@ class WebSocketManager {
   private wss: WebSocketServer | null = null;
   private clients: Map<string, ClientConnection> = new Map();
   private heartbeatInterval: ReturnType<typeof setInterval> | null = null;
+  private redisSub: typeof redis | null = null;
 
   initialize(httpServer: Server): void {
     // CC-3: Derive allowed origins for WebSocket verifyClient
@@ -153,6 +157,9 @@ class WebSocketManager {
     });
 
     logger.info('WebSocket server initialized');
+
+    // Redis Pub/Sub for multi-instance broadcasting
+    this.initRedisSubscriber();
 
     // Heartbeat: ping every 30s, terminate unresponsive clients
     this.heartbeatInterval = setInterval(() => {
@@ -320,7 +327,49 @@ class WebSocketManager {
     }
   }
 
+  private initRedisSubscriber(): void {
+    if (!redis) return;
+    try {
+      // Use a duplicate connection for subscribing (ioredis requires a dedicated connection for subscriptions)
+      this.redisSub = redis.duplicate();
+      this.redisSub.subscribe(REDIS_WS_CHANNEL, (err) => {
+        if (err) {
+          logger.warn("Failed to subscribe to Redis WS channel", { err });
+          return;
+        }
+        logger.info("WebSocket Redis Pub/Sub subscriber active");
+      });
+      this.redisSub.on("message", (_channel: string, message: string) => {
+        try {
+          const event = JSON.parse(message);
+          this.localBroadcast(event);
+        } catch (err) {
+          logger.warn("Failed to parse Redis WS message", { err });
+        }
+      });
+    } catch (err) {
+      logger.warn("Redis Pub/Sub init failed, falling back to local-only broadcast", { err });
+    }
+  }
+
   broadcast(event: {
+    type: string;
+    channel?: string;
+    data: unknown;
+    stationId?: number;
+  }): void {
+    // If Redis is available, publish to Pub/Sub so all instances receive the broadcast
+    if (redis) {
+      redis.publish(REDIS_WS_CHANNEL, JSON.stringify(event)).catch((err) => {
+        logger.warn("Redis publish failed, falling back to local broadcast", { err });
+        this.localBroadcast(event);
+      });
+    } else {
+      this.localBroadcast(event);
+    }
+  }
+
+  private localBroadcast(event: {
     type: string;
     channel?: string;
     data: unknown;
@@ -406,11 +455,16 @@ class WebSocketManager {
     };
   }
 
-  /** Stop heartbeat interval and close all client connections. */
+  /** Stop heartbeat interval, close Redis subscriber, and close all client connections. */
   destroy(): void {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+    if (this.redisSub) {
+      this.redisSub.unsubscribe(REDIS_WS_CHANNEL).catch(() => {});
+      this.redisSub.disconnect();
+      this.redisSub = null;
     }
     for (const [, client] of Array.from(this.clients.entries())) {
       if (client.ws.readyState === WebSocket.OPEN) {

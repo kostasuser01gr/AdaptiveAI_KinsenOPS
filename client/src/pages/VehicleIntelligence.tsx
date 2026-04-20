@@ -58,9 +58,15 @@ function DamageHeatmap({ onZoneClick, zoneHits }: { onZoneClick: (zone: string) 
                 rx="1.5" ry="1.5"
                 className={`${getZoneColor(hits)} cursor-pointer transition-all ${hoveredZone === zone.id ? 'opacity-100 stroke-primary' : 'opacity-70 hover:opacity-100'}`}
                 strokeWidth={hoveredZone === zone.id ? "0.8" : "0.4"}
+                tabIndex={0}
+                role="button"
+                aria-label={`${zone.label} — ${hits} incident${hits !== 1 ? 's' : ''}`}
                 onMouseEnter={() => setHoveredZone(zone.id)}
                 onMouseLeave={() => setHoveredZone(null)}
+                onFocus={() => setHoveredZone(zone.id)}
+                onBlur={() => setHoveredZone(null)}
                 onClick={() => onZoneClick(zone.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onZoneClick(zone.id); } }}
               />
               {hits > 0 && (
                 <text x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 + 1.5} textAnchor="middle" className="fill-foreground text-[3px] font-bold pointer-events-none">
@@ -166,7 +172,13 @@ export default function VehicleIntelligencePage() {
           </div>
           <ScrollArea className="flex-1 px-3">
             <div className="space-y-1 pb-4">
-              {filtered.map((v: any) => (
+              {filtered.length === 0 ? (
+                <div className="py-10 text-center">
+                  <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-muted-foreground">No vehicles found</p>
+                  <p className="text-xs text-muted-foreground mt-1">Try a different search term.</p>
+                </div>
+              ) : filtered.map((v: any) => (
                 <button key={v.id} onClick={() => { setSelectedVehicleId(v.id); setSelectedZone(null); }}
                   className={`w-full text-left p-3 rounded-lg transition-colors ${selectedVehicle?.id === v.id ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted/50'}`}
                   data-testid={`vehicle-item-${v.id}`}>
@@ -292,7 +304,7 @@ export default function VehicleIntelligencePage() {
                       <Card className="glass-panel p-4">
                         <DamageHeatmap onZoneClick={(zone) => setSelectedZone(zone)} zoneHits={zoneHits} />
                       </Card>
-                      <div className="space-y-3">
+                      <div className="space-y-3" aria-live="polite" aria-atomic="true">
                         <h4 className="text-sm font-semibold flex items-center gap-2">
                           <Activity className="h-4 w-4 text-primary" /> Evidence Log
                           {selectedZone && (

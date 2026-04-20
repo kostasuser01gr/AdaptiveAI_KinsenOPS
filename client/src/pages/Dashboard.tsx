@@ -14,6 +14,9 @@ import {
 } from 'lucide-react';
 import { Empty, EmptyContent, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { AnimatedList, AnimatedListItem, CountUp, AnimatedCard } from '@/components/motion';
+import { Skeleton } from '@/components/ui/skeleton';
+import { BottleneckRadar } from '@/components/dashboard/BottleneckRadar';
+import { RoleAwareGreeting } from '@/components/dashboard/RoleAwareGreeting';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 interface DashStats {
@@ -68,7 +71,7 @@ function StatCard({ title, value, subtitle, icon: Icon, color = "text-primary", 
           </div>
         </div>
         {href && (
-          <p className="text-xs mt-2 text-primary opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+          <p className="text-xs mt-2 text-primary opacity-60 group-hover:opacity-100 transition-opacity flex items-center gap-1">
             View details <ArrowRight className="h-3 w-3" />
           </p>
         )}
@@ -111,7 +114,7 @@ function timeAgo(dateStr: string) {
 // ─── Main Dashboard ──────────────────────────────────────────────────────────
 export default function Dashboard() {
   // Fetch all needed data
-  const { data: statsRaw } = useQuery<DashStats>({ queryKey: queryKeys.dashboard.stats() });
+  const { data: statsRaw, dataUpdatedAt, isLoading: statsLoading } = useQuery<DashStats>({ queryKey: queryKeys.dashboard.stats() });
   const { data: summaryRaw } = useQuery<AnalyticsSummary>({ queryKey: ["/api/analytics/summary"] });
   const { data: scoredWashRaw } = useQuery<WashQueueItem[]>({ queryKey: queryKeys.washQueue.scored() });
   const { data: overdueWashRaw } = useQuery<WashQueueItem[]>({ queryKey: queryKeys.washQueue.overdue() });
@@ -135,27 +138,32 @@ export default function Dashboard() {
   return (
     <ScrollArea className="h-full">
       <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <LayoutDashboard className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Operations Dashboard</h1>
-              <p className="text-sm text-muted-foreground">Real-time overview of your fleet operations</p>
-            </div>
-          </div>
-        </div>
+        {/* U-09: Role-Aware Home — tailored greeting + role-specific quick stats */}
+        <RoleAwareGreeting
+          stats={stats}
+          summary={summary}
+          overdueCount={overdueWash.length}
+          pendingRequests={pendingRequests.length}
+          incidentCount={incidents.length}
+        />
 
         {/* ── KPI Row ─────────────────────────────────────────────── */}
-        <AnimatedList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {statsLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+          </div>
+        ) : (
+        <AnimatedList className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
           <AnimatedListItem><StatCard title="Total Fleet" value={summary.totalVehicles ?? stats.vehicles ?? 0} subtitle={`${vByStatus.ready ?? 0} ready`} icon={Car} href="/fleet" /></AnimatedListItem>
           <AnimatedListItem><StatCard title="Wash Queue" value={stats.washQueue ?? 0} subtitle={`${overdueWash.length} overdue`} icon={Droplets} color={overdueWash.length > 0 ? 'text-orange-400' : 'text-primary'} href="/washers" /></AnimatedListItem>
           <AnimatedListItem><StatCard title="Active Shifts" value={stats.shifts ?? 0} subtitle={`${pendingRequests.length} pending requests`} icon={CalendarDays} color={pendingRequests.length > 0 ? 'text-yellow-400' : 'text-primary'} href="/shifts" /></AnimatedListItem>
           <AnimatedListItem><StatCard title="Open Incidents" value={incidents.length} subtitle={`${incidents.filter(i => i.severity === 'critical').length} critical`} icon={AlertTriangle} color={incidents.some(i => i.severity === 'critical') ? 'text-red-400' : 'text-primary'} href="/war-room" /></AnimatedListItem>
           <AnimatedListItem><StatCard title="Fleet Utilization" value={`${Math.round(utilization)}%`} subtitle={`${summary.totalStations ?? stats.stations ?? 0} stations`} icon={Gauge} color="text-primary" /></AnimatedListItem>
         </AnimatedList>
+        )}
+
+        {/* ── Bottleneck Radar (U-07) ────────────────────────────── */}
+        <BottleneckRadar />
 
         {/* ── Main grid ───────────────────────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -174,7 +182,7 @@ export default function Dashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   {([
                     { key: 'ready', label: 'Ready', icon: CheckCircle2, color: 'text-green-400' },
                     { key: 'rented', label: 'Rented', icon: Car, color: 'text-blue-400' },
@@ -257,7 +265,7 @@ export default function Dashboard() {
                 <CardTitle className="text-base">Today&apos;s Wash Activity</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="text-center p-3 rounded-lg bg-muted/30">
                     <p className="text-lg font-bold text-primary">{summary.washesCreatedToday ?? 0}</p>
                     <p className="text-xs text-muted-foreground">Created</p>

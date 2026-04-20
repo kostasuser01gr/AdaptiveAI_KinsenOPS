@@ -9,8 +9,10 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users as Shield, MoreHorizontal, UserPlus, AlertCircle, Copy, Loader2 } from 'lucide-react';
+import { Users as Shield, MoreHorizontal, UserPlus, AlertCircle, Copy, Loader2, Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { exportToCsv } from '@/lib/csv';
 import { CountUp, Crossfade, MotionDialog } from '@/components/motion';
+import { Empty, EmptyContent, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,6 +62,13 @@ export default function UsersPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('agent');
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState('');
+  const [sortCol, setSortCol] = useState<'name' | 'role'>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const toggleSort = (col: 'name' | 'role') => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
 
   const { data: users = [], isLoading, error } = useQuery<any[]>({
     queryKey: ["/api/users"],
@@ -104,6 +113,10 @@ export default function UsersPage() {
   });
 
   const handleCreateInvite = () => {
+    if (inviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
     inviteMutation.mutate({ email: inviteEmail || undefined, role: inviteRole });
   };
 
@@ -112,6 +125,7 @@ export default function UsersPage() {
     setInviteEmail('');
     setInviteRole('agent');
     setGeneratedToken(null);
+    setEmailError('');
   };
 
   const activeCount = users.filter((u: any) => u.id !== undefined).length;
@@ -128,10 +142,19 @@ export default function UsersPage() {
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold">{t('users')}</h1>
         </div>
-        <Button size="sm" className="gap-2" onClick={() => setInviteOpen(true)}>
-          <UserPlus className="h-4 w-4" />
-          Invite User
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+            const usersList = Array.isArray(users) ? users : [];
+            exportToCsv(usersList, [
+              { key: 'displayName', label: 'Name' }, { key: 'username', label: 'Username' },
+              { key: 'role', label: 'Role' }, { key: 'station', label: 'Station' },
+            ], 'users');
+          }} data-testid="button-export-users"><Download className="h-4 w-4" /> Export</Button>
+          <Button size="sm" className="gap-2" onClick={() => setInviteOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Invite User
+          </Button>
+        </div>
       </header>
 
       <ScrollArea className="flex-1 p-4 md:p-6 lg:px-24">
@@ -176,12 +199,12 @@ export default function UsersPage() {
                   Failed to load users. Please refresh.
                 </div>
               ) : (
-                <div className="border rounded-md">
-                  <Table>
+                <div className="border rounded-md overflow-x-auto">
+                  <Table className="min-w-[500px]">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead>Role</TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('name')}><div className="flex items-center gap-1">User {sortCol === 'name' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>
+                        <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('role')}><div className="flex items-center gap-1">Role {sortCol === 'role' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>
                         <TableHead>Station</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                       </TableRow>
@@ -189,7 +212,24 @@ export default function UsersPage() {
                     <TableBody>
                       {isLoading ? (
                         Array.from({ length: 4 }).map((_, i) => <UserSkeleton key={i} />)
-                      ) : users.map((user: any) => (
+                      ) : !users.length ? (
+                        <TableRow>
+                          <TableCell colSpan={4}>
+                            <Empty>
+                              <EmptyContent>
+                                <Shield className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                                <EmptyTitle>No users yet</EmptyTitle>
+                                <EmptyDescription>Invite team members to get started.</EmptyDescription>
+                              </EmptyContent>
+                            </Empty>
+                          </TableCell>
+                        </TableRow>
+                      ) : [...users].sort((a: any, b: any) => {
+                        const av = sortCol === 'name' ? (a.displayName || '') : (a.role || '');
+                        const bv = sortCol === 'name' ? (b.displayName || '') : (b.role || '');
+                        const cmp = av.localeCompare(bv);
+                        return sortDir === 'asc' ? cmp : -cmp;
+                      }).map((user: any) => (
                         <TableRow key={user.id}>
                           <TableCell>
                             <div className="flex items-center gap-3">
@@ -287,7 +327,7 @@ export default function UsersPage() {
               <Label>Invite Token</Label>
               <div className="flex items-center gap-2">
                 <Input readOnly value={generatedToken} className="font-mono text-xs" />
-                <Button size="icon" variant="outline" onClick={() => { navigator.clipboard.writeText(generatedToken); toast({ title: "Copied!" }); }}>
+                <Button size="icon" variant="outline" aria-label="Copy invite token" onClick={() => { navigator.clipboard.writeText(generatedToken); toast({ title: "Copied!" }); }}>
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
@@ -298,7 +338,8 @@ export default function UsersPage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="invite-email">Email (optional)</Label>
-                <Input id="invite-email" placeholder="user@example.com" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} />
+                <Input id="invite-email" placeholder="user@example.com" value={inviteEmail} onChange={(e) => { setInviteEmail(e.target.value); if (emailError) setEmailError(''); }} onBlur={() => { if (inviteEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteEmail)) setEmailError('Please enter a valid email address'); }} className={emailError ? 'border-destructive' : ''} autoFocus />
+                {emailError && <p className="text-xs text-destructive">{emailError}</p>}
                 <p className="text-xs text-muted-foreground">If set, only this email can register with the token.</p>
               </div>
               <div className="space-y-2">

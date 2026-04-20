@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/useAuth";
 import { usePWA } from "@/components/pwa/InstallPrompt";
+import { useSearchParam } from '@/hooks/useSearchParam';
 import { ApiKeysManager } from "@/components/settings/ApiKeysManager";
 import { NotificationPreferencesPanel } from "@/components/settings/NotificationPreferencesPanel";
 
@@ -26,6 +27,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
+  const [settingsTab, setSettingsTab] = useSearchParam('tab', 'portals');
   const { data: prefs } = useQuery<any[]>({ queryKey: ["/api/user-preferences"] });
   const { data: memoryData } = useQuery<any[]>({ queryKey: ["/api/workspace-memory"] });
   const memories = Array.isArray(memoryData) ? memoryData : [];
@@ -46,11 +48,16 @@ export default function SettingsPage() {
     return p ? p.value : fallback;
   };
 
+  const [companyName, setCompanyName] = useState('DriveAI Car Rentals');
+  const [companyNameError, setCompanyNameError] = useState('');
+
   const handleSave = () => {
+    if (!companyName.trim()) {
+      setCompanyNameError('Company name is required');
+      return;
+    }
     savePref.mutate({ category: 'workspace', key: 'company_name', value: companyName });
   };
-
-  const [companyName, setCompanyName] = useState('DriveAI Car Rentals');
 
   useEffect(() => {
     const saved = getPref('workspace', 'company_name', null);
@@ -68,7 +75,7 @@ export default function SettingsPage() {
       <ScrollArea className="flex-1 p-4 md:p-6 lg:px-24">
         <div className="max-w-5xl mx-auto pb-12 flex flex-col md:flex-row gap-8">
           
-          <Tabs defaultValue="portals" className="w-full flex flex-col md:flex-row gap-6" orientation="vertical">
+          <Tabs value={settingsTab} onValueChange={setSettingsTab} className="w-full flex flex-col md:flex-row gap-6" orientation="vertical">
             <TabsList className="flex flex-col h-auto w-full md:w-56 bg-transparent space-y-1 justify-start items-stretch">
               <TabsTrigger value="general" className="justify-start data-[state=active]:bg-muted"><SettingsIcon className="w-4 h-4 mr-2" /> General</TabsTrigger>
               <TabsTrigger value="workspace" className="justify-start data-[state=active]:bg-muted"><ShieldCheck className="w-4 h-4 mr-2" /> Workspace</TabsTrigger>
@@ -282,7 +289,8 @@ export default function SettingsPage() {
                   <CardContent className="space-y-6">
                     <div className="grid gap-2">
                       <Label htmlFor="company">Company Name</Label>
-                      <Input id="company" value={companyName} onChange={(e) => setCompanyName(e.target.value)} />
+                      <Input id="company" value={companyName} onChange={(e) => { setCompanyName(e.target.value); if (companyNameError) setCompanyNameError(''); }} onBlur={() => { if (!companyName.trim()) setCompanyNameError('Company name is required'); }} className={companyNameError ? 'border-destructive' : ''} />
+                      {companyNameError && <p className="text-xs text-destructive">{companyNameError}</p>}
                     </div>
                     <Button onClick={handleSave} disabled={savePref.isPending}>
                       <Save className="w-4 h-4 mr-2" /> {savePref.isPending ? 'Saving…' : 'Save Changes'}

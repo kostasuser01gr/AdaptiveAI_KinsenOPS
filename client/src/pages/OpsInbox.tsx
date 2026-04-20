@@ -8,8 +8,10 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Inbox, CheckCircle2, Clock, Loader2, UserCheck, ArrowUpRight, CircleDot, CircleCheck, CircleAlert } from 'lucide-react';
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { formatRelative } from '@/lib/formatDate';
 import { useAuth } from "@/lib/useAuth";
 import type { Notification } from "@shared/schema";
+import { useSearchParam } from '@/hooks/useSearchParam';
 
 type FilterTab = 'all' | 'unread' | 'open' | 'in_progress' | 'critical' | 'incident' | 'approval' | 'ai_insight';
 
@@ -18,7 +20,7 @@ export default function OpsInboxPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [selectedId, setSelectedId] = React.useState<number | null>(null);
-  const [filter, setFilter] = React.useState<FilterTab>('all');
+  const [filter, setFilter] = useSearchParam('filter', 'all') as [string, (v: string) => void];
 
   const { data: notifications, isLoading } = useQuery<(Notification & { read: boolean })[]>({
     queryKey: ["/api/notifications"],
@@ -32,21 +34,41 @@ export default function OpsInboxPage() {
     mutationFn: async (id: number) => {
       await apiRequest("PATCH", `/api/notifications/${id}/read`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/notifications"] });
+      const previous = queryClient.getQueryData(["/api/notifications"]);
+      queryClient.setQueryData(["/api/notifications"], (old: any[] | undefined) =>
+        old?.map((n: any) => n.id === id ? { ...n, read: true } : n)
+      );
+      return { previous };
     },
-    onError: (err: Error) => toast({ title: "Failed to mark as read", description: err.message, variant: "destructive" }),
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/notifications"], context.previous);
+      toast({ title: "Failed to mark as read", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["/api/notifications"] }),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/notifications/read-all");
     },
-    onSuccess: () => {
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["/api/notifications"] });
+      const previous = queryClient.getQueryData(["/api/notifications"]);
+      queryClient.setQueryData(["/api/notifications"], (old: any[] | undefined) =>
+        old?.map((n: any) => ({ ...n, read: true }))
+      );
+      return { previous };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/notifications"], context.previous);
+      toast({ title: "Failed to mark all as read", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ops-inbox/stats"] });
     },
-    onError: (err: Error) => toast({ title: "Failed to mark all as read", description: err.message, variant: "destructive" }),
   });
 
   const assignMutation = useMutation({
@@ -80,12 +102,23 @@ export default function OpsInboxPage() {
         status: 'resolved',
       });
     },
-    onSuccess: (_data, variables) => {
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/notifications"] });
+      const previous = queryClient.getQueryData(["/api/notifications"]);
+      queryClient.setQueryData(["/api/notifications"], (old: any[] | undefined) =>
+        old?.map((n: any) => n.id === id ? { ...n, status: 'resolved', read: true } : n)
+      );
+      return { previous };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/notifications"], context.previous);
+      toast({ title: "Action failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: (_data, _err, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ops-inbox/stats"] });
       toast({ title: `Action: ${variables.action}`, description: "Notification resolved." });
     },
-    onError: (err: Error) => toast({ title: "Action failed", description: err.message, variant: "destructive" }),
   });
 
   const items = Array.isArray(notifications) ? notifications : [];
@@ -140,7 +173,7 @@ export default function OpsInboxPage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2" data-testid="text-page-title">
             <Inbox className="h-5 w-5 text-primary" /> Ops Inbox
-            {unreadCount > 0 && <Badge variant="destructive" className="text-xs">{unreadCount}</Badge>}
+            <span aria-live="polite" aria-atomic="true">{unreadCount > 0 && <Badge variant="destructive" className="text-xs">{unreadCount}</Badge>}</span>
           </h1>
           <p className="text-sm text-muted-foreground">
             Actionable notifications, alerts, and approvals.
@@ -182,12 +215,23 @@ export default function OpsInboxPage() {
               {filtered.map((n) => (
                 <div
                   key={n.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${n.read ? '' : 'Unread '}${n.severity === 'critical' ? 'Critical ' : ''}notification: ${n.title}`}
+                  aria-selected={n.id === (selected?.id)}
                   className={`p-4 cursor-pointer transition-colors ${
                     n.id === (selected?.id) ? 'bg-accent' : ''
                   } ${n.severity === 'critical' && !n.read ? 'bg-destructive/5 hover:bg-destructive/10 border-l-4 border-l-destructive' : 'bg-card hover:bg-accent'} ${n.read ? 'opacity-60' : ''}`}
                   onClick={() => {
                     setSelectedId(n.id);
                     if (!n.read) markReadMutation.mutate(n.id);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedId(n.id);
+                      if (!n.read) markReadMutation.mutate(n.id);
+                    }
                   }}
                   data-testid={`notification-${n.id}`}
                 >
@@ -199,9 +243,9 @@ export default function OpsInboxPage() {
                         <Badge variant="outline" className="h-4 text-[9px] bg-green-500/10 text-green-500 border-green-500/20">Acted</Badge>
                       )}
                     </div>
-                    <span className="text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleTimeString()}</span>
+                    <span className="text-xs text-muted-foreground">{formatRelative(n.createdAt)}</span>
                   </div>
-                  <h4 className="font-semibold text-sm mb-1">{n.title}</h4>
+                  <h4 className="font-semibold text-sm mb-1 truncate">{n.title}</h4>
                   <p className="text-xs text-muted-foreground line-clamp-2">{n.body}</p>
                   {n.assignedTo && (
                     <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
@@ -212,9 +256,10 @@ export default function OpsInboxPage() {
                 </div>
               ))}
               {filtered.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Inbox className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p>No notifications matching filter</p>
+                <div className="text-center py-16 text-muted-foreground">
+                  <Inbox className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                  <p className="font-medium text-sm">All clear</p>
+                  <p className="text-xs mt-1">No notifications matching your current filter.</p>
                 </div>
               )}
             </div>
@@ -238,7 +283,7 @@ export default function OpsInboxPage() {
                 </div>
                 <h2 className="text-2xl font-bold mb-2" data-testid="text-notification-title">{selected.title}</h2>
                 <p className="text-muted-foreground text-sm">
-                  {new Date(selected.createdAt).toLocaleString()} · {selected.audience === 'broadcast' ? 'Broadcast' : 'Direct'}
+                  {formatRelative(selected.createdAt)} · {selected.audience === 'broadcast' ? 'Broadcast' : 'Direct'}
                   {selected.assignedTo && (
                     <span className="ml-2">· <UserCheck className="h-3 w-3 inline" /> {selected.assignedTo === user?.id ? 'Assigned to you' : `Assigned to #${selected.assignedTo}`}</span>
                   )}
@@ -347,7 +392,7 @@ export default function OpsInboxPage() {
                           <p className="text-sm font-medium text-green-400">Action taken: {actionTaken}</p>
                           <p className="text-xs text-muted-foreground">
                             by {(meta.actionBy as number) === user?.id ? 'you' : `user #${meta.actionBy}`} at{' '}
-                            {meta.actionAt ? new Date(meta.actionAt as string).toLocaleString() : '—'}
+                            {meta.actionAt ? formatRelative(meta.actionAt as string) : '—'}
                           </p>
                         </div>
                       </CardContent>

@@ -8,12 +8,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Database, FileText, UploadCloud, RefreshCw, BookOpen, Search, Brain, MessageSquare, Sparkles, Shield } from 'lucide-react';
 import { Input } from "@/components/ui/input";
 import { useEntitlements } from "@/lib/useEntitlements";
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { useSearchParam } from '@/hooks/useSearchParam';
 import { LockedFeature } from "@/components/LockedFeature";
 
 export default function KnowledgeBasePage() {
   const { data: memories } = useQuery({ queryKey: ["/api/workspace-memory"] });
   const { hasFeature } = useEntitlements();
   const allMemories = Array.isArray(memories) ? memories : [];
+  const [kbTab, setKbTab] = useSearchParam('tab', 'documents');
   const [searchTerm, setSearchTerm] = React.useState('');
   const [askQuery, setAskQuery] = React.useState('');
   const [askResult, setAskResult] = React.useState<string | null>(null);
@@ -35,8 +38,9 @@ export default function KnowledgeBasePage() {
     { name: 'Damage_Assessment_Guide.pdf', size: '3.1 MB', date: '1 month ago', type: 'SOP', indexed: true },
   ];
 
-  const filteredDocs = searchTerm
-    ? documents.filter(d => d.name.toLowerCase().includes(searchTerm.toLowerCase()) || d.type.toLowerCase().includes(searchTerm.toLowerCase()))
+  const debouncedSearch = useDebouncedValue(searchTerm, 200);
+  const filteredDocs = debouncedSearch
+    ? documents.filter(d => d.name.toLowerCase().includes(debouncedSearch.toLowerCase()) || d.type.toLowerCase().includes(debouncedSearch.toLowerCase()))
     : documents;
 
   const handleAsk = () => {
@@ -111,7 +115,7 @@ export default function KnowledgeBasePage() {
             ))}
           </div>
 
-          <Tabs defaultValue="documents">
+          <Tabs value={kbTab} onValueChange={setKbTab}>
             <TabsList>
               <TabsTrigger value="documents" data-testid="tab-documents">Documents</TabsTrigger>
               <TabsTrigger value="memory" data-testid="tab-memory">AI Memory ({allMemories.length})</TabsTrigger>
@@ -126,7 +130,13 @@ export default function KnowledgeBasePage() {
 
               <Card className="glass-panel">
                 <CardContent className="p-0 divide-y">
-                  {filteredDocs.map((file, i) => (
+                  {filteredDocs.length === 0 ? (
+                    <div className="py-10 text-center">
+                      <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                      <p className="text-sm font-medium text-muted-foreground">No documents match "{searchTerm}"</p>
+                      <p className="text-xs text-muted-foreground mt-1">Try different keywords or upload new documents.</p>
+                    </div>
+                  ) : filteredDocs.map((file, i) => (
                     <div key={i} className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors cursor-pointer" data-testid={`doc-item-${i}`}>
                       <div className="flex items-center gap-3">
                         <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center">

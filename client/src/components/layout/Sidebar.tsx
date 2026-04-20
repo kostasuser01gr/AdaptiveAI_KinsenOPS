@@ -7,8 +7,8 @@ import { queryKeys } from '@/lib/queryKeys';
 import { Link, useLocation } from 'wouter';
 import { 
   Plus, Settings, Settings2, Car, MessageSquare, MoreHorizontal, Pin, Command,
-  Database, Users, Droplets, CalendarDays, Calendar, FileUp, Inbox, LayoutDashboard,
-  BarChart3, Bot, LogOut, Activity, Zap, Shield, Eye, Brain, ShieldCheck, Crown, ChevronRight, Building2, FileCheck, Hash, Blocks, EyeOff, Pencil, PanelLeftClose, PanelLeft, LayoutGrid, Lightbulb
+  Database, Users, Droplets, CalendarDays, Calendar, FileUp, Inbox, LayoutDashboard, Bell,
+  BarChart3, Bot, LogOut, Activity, Zap, Shield, Eye, Brain, ShieldCheck, Crown, ChevronRight, ChevronDown, Building2, FileCheck, Hash, Blocks, EyeOff, Pencil, PanelLeftClose, PanelLeft, LayoutGrid, Lightbulb
 } from 'lucide-react';
 import FeedbackDialog from '@/components/FeedbackDialog';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { usePageLayout } from "@/hooks/useLayoutPreferences";
 import { ROLE_HIERARCHY, hasMinRole } from "../../../../shared/roles";
 const ROLE_COLORS: Record<string, string> = {
@@ -117,30 +118,68 @@ export default function Sidebar() {
               <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} w-full`}>
                 <Bot className="h-4 w-4 shrink-0" />
                 {!collapsed && <span className="font-medium text-sm flex-1">{t('new_chat')}</span>}
+                {!collapsed && <kbd className="h-4 items-center rounded border bg-background/50 px-1 font-mono text-[9px] text-muted-foreground hidden group-hover:flex">⌘J</kbd>}
                 {!collapsed && <Plus className="h-4 w-4 opacity-0 group-hover:opacity-100 transition-opacity" />}
               </div>
             </Link>
           </Button>
-          <Button variant={isModuleActive('/inbox') ? 'secondary' : 'ghost'} className={`w-full ${collapsed ? 'justify-center px-0' : 'justify-start px-3'} h-10 rounded-lg`} asChild>
-            <Link href="/inbox">
-              <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} w-full`}>
-                <Inbox className="h-4 w-4 shrink-0" />
-                {!collapsed && <span className="font-medium text-sm flex-1">{t('ops_inbox')}</span>}
-                {!collapsed && unreadCount > 0 && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]" data-testid="badge-unread-count">{unreadCount}</Badge>}
-              </div>
-            </Link>
-          </Button>
+          <div className="flex items-center gap-0.5">
+            <Button variant={isModuleActive('/inbox') ? 'secondary' : 'ghost'} className={`flex-1 ${collapsed ? 'justify-center px-0' : 'justify-start px-3'} h-10 rounded-lg group`} asChild>
+              <Link href="/inbox">
+                <div className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} w-full`}>
+                  <Inbox className="h-4 w-4 shrink-0" />
+                  {!collapsed && <span className="font-medium text-sm flex-1">{t('ops_inbox')}</span>}
+                  {!collapsed && unreadCount === 0 && <kbd className="h-4 items-center rounded border bg-background/50 px-1 font-mono text-[9px] text-muted-foreground hidden group-hover:flex">⌘⇧I</kbd>}
+                  {!collapsed && unreadCount > 0 && <Badge variant="destructive" className="h-5 px-1.5 text-[10px]" data-testid="badge-unread-count">{unreadCount}</Badge>}
+                </div>
+              </Link>
+            </Button>
+            {!collapsed && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 relative shrink-0" aria-label="Quick notification preview">
+                    <Bell className="h-3.5 w-3.5" />
+                    {unreadCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent side="right" align="start" className="w-80 p-0" aria-label="Recent notifications">
+                  <div className="p-3 border-b">
+                    <h4 className="font-semibold text-sm flex items-center gap-2">
+                      Notifications
+                      {unreadCount > 0 && <Badge variant="destructive" className="text-[10px] h-4 px-1">{unreadCount}</Badge>}
+                    </h4>
+                  </div>
+                  <ScrollArea className="max-h-72">
+                    <div className="p-2 space-y-1">
+                      {Array.isArray(notificationsData) && notificationsData.filter((n: any) => !n.read).length > 0 ? (
+                        notificationsData.filter((n: any) => !n.read).slice(0, 8).map((n: any) => (
+                          <Link key={n.id} href="/inbox">
+                            <div className="px-2 py-1.5 rounded-md hover:bg-muted/60 cursor-pointer transition-colors">
+                              <div className="flex items-center gap-2">
+                                {n.severity === 'critical' && <span className="h-1.5 w-1.5 rounded-full bg-destructive shrink-0" />}
+                                <span className="font-medium text-xs truncate">{n.title}</span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground truncate mt-0.5">{n.body}</p>
+                            </div>
+                          </Link>
+                        ))
+                      ) : (
+                        <div className="text-center py-6 text-muted-foreground text-xs">All caught up!</div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                  <div className="p-2 border-t">
+                    <Button variant="ghost" size="sm" className="w-full text-xs h-7" asChild>
+                      <Link href="/inbox">View all notifications</Link>
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
         </div>
 
-        {!collapsed && (
-          <div className="mt-4 mb-2 px-3 flex items-center justify-between">
-            <span className="text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">{t('operations')}</span>
-            <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setEditMode(!editMode)} data-testid="button-sidebar-edit">
-              <Pencil className={`h-3 w-3 ${editMode ? 'text-primary' : 'text-sidebar-foreground/30'}`} />
-            </Button>
-          </div>
-        )}
-        {collapsed && <div className="mt-3 mb-2 border-t border-sidebar-border" />}
+        <SidebarSection label={t('operations')} collapsed={collapsed} editMode={editMode} onEditToggle={() => setEditMode(!editMode)} showEdit sectionKey="operations" getSidebarPref={getSidebarPref} setSidebarPref={setSidebarPref}>
         <div className="flex flex-col gap-0.5">
           <NavItem href="/dashboard" icon={<LayoutDashboard />} label={t('dashboard')} active={isModuleActive('/dashboard')} hidden={isHidden('/dashboard')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
           <NavItem href="/fleet" icon={<Car />} label={t('fleet')} active={isModuleActive('/fleet')} badge={dashStats?.vehicles} hidden={isHidden('/fleet')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
@@ -151,18 +190,18 @@ export default function Sidebar() {
           <NavItem href="/vehicle-intelligence" icon={<Eye />} label={t('vehicle_intel')} active={isModuleActive('/vehicle-intelligence')} hidden={isHidden('/vehicle-intelligence')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
           <NavItem href="/channels" icon={<Hash />} label={t('channels')} active={isModuleActive('/channels')} hidden={isHidden('/channels')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
         </div>
+        </SidebarSection>
 
-        {!collapsed && <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">{t('intelligence')}</div>}
-        {collapsed && <div className="mt-2 mb-2 border-t border-sidebar-border" />}
+        <SidebarSection label={t('intelligence')} collapsed={collapsed} sectionKey="intelligence" getSidebarPref={getSidebarPref} setSidebarPref={setSidebarPref}>
         <div className="flex flex-col gap-0.5">
           <NavItem href="/digital-twin" icon={<Activity />} label={t('digital_twin')} active={isModuleActive('/digital-twin')} hidden={isHidden('/digital-twin')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
           {hasAccess(role, 2) && <NavItem href="/executive" icon={<BarChart3 />} label={t('executive')} active={isModuleActive('/executive')} hidden={isHidden('/executive')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />}
           <NavItem href="/analytics" icon={<BarChart3 />} label={t('analytics')} active={isModuleActive('/analytics')} hidden={isHidden('/analytics')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
           <NavItem href="/war-room" icon={<Shield />} label={t('war_room')} active={isModuleActive('/war-room')} badge={dashStats?.warRooms} hidden={isHidden('/war-room')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
         </div>
+        </SidebarSection>
 
-        {!collapsed && <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">{t('platform')}</div>}
-        {collapsed && <div className="mt-2 mb-2 border-t border-sidebar-border" />}
+        <SidebarSection label={t('platform')} collapsed={collapsed} sectionKey="platform" getSidebarPref={getSidebarPref} setSidebarPref={setSidebarPref}>
         <div className="flex flex-col gap-0.5">
           <NavItem href="/automations" icon={<Zap />} label={t('automations')} active={isModuleActive('/automations')} badge={dashStats?.automations} hidden={isHidden('/automations')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
           {hasAccess(role, 2) && <NavItem href="/workspace-memory" icon={<Brain />} label={t('workspace_memory')} active={isModuleActive('/workspace-memory')} hidden={isHidden('/workspace-memory')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />}
@@ -173,33 +212,29 @@ export default function Sidebar() {
           <NavItem href="/ideas" icon={<Lightbulb />} label="Ideas Hub" active={isModuleActive('/ideas')} hidden={isHidden('/ideas')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
           <NavItem href="/knowledge" icon={<Database />} label={t('knowledge_base')} active={isModuleActive('/knowledge')} hidden={isHidden('/knowledge')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
         </div>
+        </SidebarSection>
 
         {hasAccess(role, 3) && (
-          <>
-            {!collapsed && <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">{t('governance')}</div>}
-            {collapsed && <div className="mt-2 mb-2 border-t border-sidebar-border" />}
+          <SidebarSection label={t('governance')} collapsed={collapsed} sectionKey="governance" getSidebarPref={getSidebarPref} setSidebarPref={setSidebarPref}>
             <div className="flex flex-col gap-0.5">
               <NavItem href="/trust" icon={<ShieldCheck />} label={t('trust_console')} active={isModuleActive('/trust')} hidden={isHidden('/trust')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
               <NavItem href="/users" icon={<Users />} label={t('users')} active={isModuleActive('/users')} hidden={isHidden('/users')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
               <NavItem href="/system-config" icon={<Settings2 />} label={t('system_config')} active={isModuleActive('/system-config')} hidden={isHidden('/system-config')} editMode={editMode} onToggle={toggleHidden} collapsed={collapsed} />
             </div>
-          </>
+          </SidebarSection>
         )}
 
-        {!collapsed && (
-          <>
-            <div className="mt-4 mb-2 px-3 text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">{t('pinned')}</div>
-            <div className="flex flex-col gap-0.5 pb-4">
-              {pinnedConversations.length > 0 ? (
-                pinnedConversations.map((c: any) => (
-                  <ThreadItem key={c.id} id={c.id.toString()} label={c.title} isThread={true} />
-                ))
-              ) : (
-                <p className="px-3 text-xs text-sidebar-foreground/40 italic">{t('no_pinned_threads')}</p>
-              )}
-            </div>
-          </>
-        )}
+        <SidebarSection label={t('pinned')} collapsed={collapsed} sectionKey="pinned" getSidebarPref={getSidebarPref} setSidebarPref={setSidebarPref}>
+          <div className="flex flex-col gap-0.5 pb-4">
+            {pinnedConversations.length > 0 ? (
+              pinnedConversations.map((c: any) => (
+                <ThreadItem key={c.id} id={c.id.toString()} label={c.title} isThread={true} />
+              ))
+            ) : (
+              <p className="px-3 text-xs text-sidebar-foreground/40 italic">{t('no_pinned_threads')}</p>
+            )}
+          </div>
+        </SidebarSection>
       </ScrollArea>
 
       <div className="p-3 border-t border-sidebar-border bg-sidebar">
@@ -208,7 +243,7 @@ export default function Sidebar() {
             <Button variant="ghost" size="icon" className="h-9 w-9 text-sidebar-foreground/60 hover:text-sidebar-foreground" onClick={() => setSidebarCollapsed(false)} aria-label="Expand sidebar">
               <PanelLeft className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9" asChild>
+            <Button variant="ghost" size="icon" className="h-9 w-9" asChild aria-label="Settings">
               <Link href="/settings"><Settings className="h-4 w-4 text-sidebar-foreground/60" /></Link>
             </Button>
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 relative">
@@ -262,6 +297,59 @@ export default function Sidebar() {
         )}
       </div>
     </motion.nav>
+  );
+}
+
+function SidebarSection({ label, collapsed, sectionKey, getSidebarPref, setSidebarPref, editMode, onEditToggle, showEdit, children }: {
+  label: string;
+  collapsed: boolean;
+  sectionKey: string;
+  getSidebarPref: <T>(key: string, fallback: T) => T;
+  setSidebarPref: (key: string, value: unknown) => void;
+  editMode?: boolean;
+  onEditToggle?: () => void;
+  showEdit?: boolean;
+  children: React.ReactNode;
+}) {
+  const prefKey = `section_${sectionKey}`;
+  const isOpen = getSidebarPref<boolean>(prefKey, true);
+
+  if (collapsed) {
+    return (
+      <>
+        <div className="mt-3 mb-2 border-t border-sidebar-border" />
+        {children}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="mt-4 mb-2 px-3 flex items-center justify-between w-full group"
+        onClick={() => setSidebarPref(prefKey, !isOpen)}
+        aria-expanded={isOpen}
+      >
+        <div className="flex items-center gap-1.5">
+          <ChevronDown className={`h-3 w-3 text-sidebar-foreground/40 transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+          <span className="text-xs font-semibold text-sidebar-foreground/50 tracking-wider uppercase">{label}</span>
+        </div>
+        {showEdit && onEditToggle && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            onClick={(e) => { e.stopPropagation(); onEditToggle(); }}
+            data-testid="button-sidebar-edit"
+            aria-label="Edit sidebar visibility"
+          >
+            <Pencil className={`h-3 w-3 ${editMode ? 'text-primary' : 'text-sidebar-foreground/30'}`} />
+          </Button>
+        )}
+      </button>
+      {isOpen && children}
+    </>
   );
 }
 

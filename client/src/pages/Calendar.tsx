@@ -79,9 +79,9 @@ export default function CalendarPage() {
           <p className="text-sm text-muted-foreground">Shifts, fleet events, and queue pressure — unified week view</p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week"><ChevronLeft className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Previous week" onClick={() => setWeekOffset(w => w - 1)} data-testid="button-prev-week"><ChevronLeft className="h-4 w-4" /></Button>
           <Button variant="outline" size="sm" onClick={() => setWeekOffset(0)} data-testid="button-today">Today</Button>
-          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week"><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Next week" onClick={() => setWeekOffset(w => w + 1)} data-testid="button-next-week"><ChevronRight className="h-4 w-4" /></Button>
         </div>
       </div>
 
@@ -95,7 +95,8 @@ export default function CalendarPage() {
 
       <ScrollArea className="flex-1">
         <div className="p-4 md:p-6 space-y-6">
-          <div className="grid grid-cols-8 gap-0 border rounded-lg overflow-hidden">
+          <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+          <div className="grid grid-cols-8 gap-0 border rounded-lg overflow-hidden min-w-[700px]">
             <div className="bg-muted/30 p-2 border-r border-b">
               <span className="text-xs font-medium text-muted-foreground">Week</span>
             </div>
@@ -157,6 +158,7 @@ export default function CalendarPage() {
                 ))}
               </div>
             ))}
+          </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { z } from "zod/v4";
 import { storage } from "../storage.js";
 import { requireAuth, requireRole } from "../auth.js";
+import { cached, CacheTTL } from "../cache.js";
 import { auditLog, AUDIT_ACTIONS } from "../middleware/audit.js";
 import { recordUsage, checkUsageCeiling } from "../metering/service.js";
 import { searchLimiter, aiChatLimiter } from "../middleware/rate-limiter.js";
@@ -15,19 +16,23 @@ import {
 export function registerAnalyticsRoutes(app: Express) {
   // DASHBOARD STATS
   app.get("/api/dashboard-stats", requireAuth, async (_req, res, next) => {
-    try { res.json(await storage.getDashboardStats()); } catch (e) { next(e); }
+    try {
+      res.json(await cached("dashboard-stats", CacheTTL.SHORT, () => storage.getDashboardStats()));
+    } catch (e) { next(e); }
   });
 
   // ANALYTICS SUMMARY
   app.get("/api/analytics/summary", requireAuth, async (_req, res, next) => {
-    try { res.json(await storage.getAnalyticsSummary()); } catch (e) { next(e); }
+    try {
+      res.json(await cached("analytics:summary", CacheTTL.MEDIUM, () => storage.getAnalyticsSummary()));
+    } catch (e) { next(e); }
   });
 
   // ANALYTICS TRENDS
   app.get("/api/analytics/trends", requireAuth, async (req, res, next) => {
     try {
       const days = Math.min(Math.max(parseInt(req.query.days as string) || 30, 1), 90);
-      res.json(await storage.getAnalyticsTrends(days));
+      res.json(await cached(`analytics:trends:${days}`, CacheTTL.LONG, () => storage.getAnalyticsTrends(days)));
     } catch (e) { next(e); }
   });
 

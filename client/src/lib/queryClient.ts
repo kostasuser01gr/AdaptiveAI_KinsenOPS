@@ -110,8 +110,15 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null as any;
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null as any;
+      }
+      // Session expired — redirect to auth
+      if (window.location.pathname !== '/setup' && window.location.pathname !== '/auth') {
+        window.location.replace('/');
+      }
+      throw new Error("Session expired");
     }
 
     await throwIfResNotOk(res);
@@ -129,7 +136,8 @@ export const queryClient = new QueryClient({
       // 30s stale time keeps operational data fresh without hammering the server
       staleTime: 30 * 1000,
       gcTime: 5 * 60 * 1000,
-      retry: 1,
+      retry: 2,
+      retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
     },
     mutations: {
       retry: false,

@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -70,7 +70,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
   static getDerivedStateFromError(error: Error): EBState {
     return { hasError: true, error };
   }
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error("[ErrorBoundary]", error, info.componentStack);
     Sentry.withScope((scope) => {
       scope.setContext("react", { componentStack: info.componentStack });
@@ -89,7 +89,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, EBSta
       }),
     }).catch(() => {});
   }
-  render() {
+  override render() {
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center h-full gap-4 p-8 text-center min-h-[200px]">
@@ -161,6 +161,7 @@ const WS_CHANNELS = ['vehicles', 'wash-queue', 'activity', 'notifications'];
 
 function StaffRoute({ children, skeleton }: { children: React.ReactNode; skeleton?: React.ReactNode }) {
   const { user, isLoading } = useAuth();
+  const [location] = useLocation();
   useWebSocket(user ? WS_CHANNELS : []);
   if (isLoading) return <FullScreenLoader />;
   if (!user) return <AuthPage />;
@@ -170,7 +171,7 @@ function StaffRoute({ children, skeleton }: { children: React.ReactNode; skeleto
         <ErrorBoundary>
           <Suspense fallback={skeleton ?? <PageSkeleton />}>
             <AnimatePresence mode="wait">
-              <AnimatedPage>
+              <AnimatedPage key={location}>
                 {children}
               </AnimatedPage>
             </AnimatePresence>
@@ -183,6 +184,7 @@ function StaffRoute({ children, skeleton }: { children: React.ReactNode; skeleto
 
 function AdminRoute({ children, skeleton }: { children: React.ReactNode; skeleton?: React.ReactNode }) {
   const { user, isLoading } = useAuth();
+  const [location] = useLocation();
   useWebSocket(user ? WS_CHANNELS : []);
   if (isLoading) return <FullScreenLoader />;
   if (!user) return <AuthPage />;
@@ -205,7 +207,7 @@ function AdminRoute({ children, skeleton }: { children: React.ReactNode; skeleto
         <ErrorBoundary>
           <Suspense fallback={skeleton ?? <PageSkeleton />}>
             <AnimatePresence mode="wait">
-              <AnimatedPage>
+              <AnimatedPage key={location}>
                 {children}
               </AnimatedPage>
             </AnimatePresence>
@@ -227,8 +229,19 @@ function SetupGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// ─── Scroll to top on route change ───────────────────────────────────────────
+function ScrollToTop() {
+  const [location] = useLocation();
+  React.useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location]);
+  return null;
+}
+
 function Router() {
   return (
+    <>
+    <ScrollToTop />
     <Switch>
       <Route path="/setup">
         <SetupGuard><ErrorBoundary><Suspense fallback={<FullScreenLoader />}><SetupWizard /></Suspense></ErrorBoundary></SetupGuard>
@@ -299,6 +312,7 @@ function Router() {
 
       <Route component={NotFound} />
     </Switch>
+    </>
   );
 }
 

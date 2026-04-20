@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Camera, Image as ImageIcon, UploadCloud, CheckCircle2, AlertTriangle, Shield, ChevronRight, Lock, Eye, Trash2, Loader2 } from 'lucide-react';
 import { SuccessCheck } from '@/components/motion';
 
-const DAMAGE_ZONES = ['Front Left', 'Front Center', 'Front Right', 'Left Side', 'Right Side', 'Rear Left', 'Rear Center', 'Rear Right', 'Roof', 'Interior'];
+const DAMAGE_ZONES = ['Front', 'Front-Left', 'Left Side', 'Rear-Left', 'Rear', 'Rear-Right', 'Right Side', 'Front-Right', 'Interior', 'Odometer', 'Fuel Gauge', 'Roof'];
+const COVERAGE_THRESHOLD = 80; // Minimum % to enable submit
 
 export default function CustomerUpload() {
   const [, params] = useRoute('/customer/res/:id/:tab');
@@ -54,6 +55,7 @@ export default function CustomerUpload() {
       setRefCode(`EVD-${ids[0]}-${ids.length}`);
       setSubmitted(true);
     },
+    onError: () => { /* Error UI rendered via submitMutation.isError */ },
   });
 
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -155,19 +157,19 @@ export default function CustomerUpload() {
 
           <div className="space-y-2">
             <p className="text-sm font-medium">All Zones</p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {DAMAGE_ZONES.map((zone, i) => {
                 const photo = photos.find(p => p.zone === zone);
                 return (
                   <button key={zone} onClick={() => { setCurrentZone(i); if (!photo) fileRef.current?.click(); }}
-                    className={`p-3 rounded-lg border text-left text-sm transition-colors ${
-                      i === currentZone ? 'border-primary bg-primary/5' :
-                      photo ? 'border-green-500/30 bg-green-500/5' : 'border-border hover:bg-muted/50'
+                    className={`aspect-[4/3] rounded-lg border text-left text-xs transition-all flex flex-col items-start justify-between p-2.5 ${
+                      i === currentZone ? 'border-primary bg-primary/5 ring-1 ring-primary/30' :
+                      photo ? 'border-green-500/30 bg-green-500/5' : 'border-dashed border-border hover:bg-muted/50'
                     }`} data-testid={`zone-${i}`}>
-                    <div className="flex items-center justify-between">
-                      <span className={photo ? 'text-green-400' : 'text-muted-foreground'}>{zone}</span>
-                      {photo ? <CheckCircle2 className="h-4 w-4 text-green-400" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-                    </div>
+                    <span className={`text-base ${photo ? 'text-green-400' : 'text-muted-foreground/40'}`}>
+                      {photo ? '✓' : '◇'}
+                    </span>
+                    <span className={`font-mono text-[10px] ${photo ? 'text-green-400' : 'text-muted-foreground'}`}>{zone}</span>
                   </button>
                 );
               })}
@@ -204,27 +206,39 @@ export default function CustomerUpload() {
             </div>
           )}
 
-          {photos.length >= 3 && (
-            <div className="space-y-3">
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input type="checkbox" checked={agreedPrivacy} onChange={e => setAgreedPrivacy(e.target.checked)} className="mt-1" data-testid="checkbox-privacy" />
-                <span className="text-xs text-muted-foreground">I understand that these photos will be securely stored and used only for documenting the vehicle condition at the time of rental.</span>
-              </label>
-              <Button className="w-full h-14 text-lg rounded-xl gap-2" onClick={handleSubmit} disabled={!agreedPrivacy || submitMutation.isPending} data-testid="button-submit-evidence">
-                {submitMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <UploadCloud className="h-5 w-5" />} {submitMutation.isPending ? 'Uploading...' : `Submit Evidence (${photos.length} photos)`}
-              </Button>
-              {submitMutation.isError && (
-                <p className="text-xs text-red-400 text-center mt-2">Upload failed. Please try again.</p>
-              )}
-            </div>
-          )}
+          {(() => {
+            const coverage = Math.round((photos.length / DAMAGE_ZONES.length) * 100);
+            const canSubmit = coverage >= COVERAGE_THRESHOLD;
+            return photos.length > 0 && (
+              <div className="space-y-3">
+                {/* Coverage score card */}
+                <Card className={canSubmit ? 'border-green-500/30 bg-green-500/5' : 'border-yellow-500/30 bg-yellow-500/5'}>
+                  <CardContent className="p-4 text-center">
+                    <p className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider mb-1">Coverage Score</p>
+                    <p className={`text-4xl font-bold ${canSubmit ? 'text-green-400' : 'text-foreground'}`}>{coverage}%</p>
+                    <div className="w-full bg-muted rounded-full h-2 mt-2 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${canSubmit ? 'bg-green-500' : 'bg-primary'}`} style={{ width: `${coverage}%` }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {canSubmit ? 'Coverage is sufficient — ready to submit!' : `Submit unlocks at ${COVERAGE_THRESHOLD}%. ${Math.ceil((COVERAGE_THRESHOLD / 100) * DAMAGE_ZONES.length) - photos.length} more photo(s) needed.`}
+                    </p>
+                  </CardContent>
+                </Card>
 
-          {photos.length < 3 && photos.length > 0 && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 p-3 rounded-lg flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-yellow-400">Minimum 3 photos required. Please photograph more zones for a complete record.</p>
-            </div>
-          )}
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input type="checkbox" checked={agreedPrivacy} onChange={e => setAgreedPrivacy(e.target.checked)} className="mt-1" data-testid="checkbox-privacy" />
+                  <span className="text-xs text-muted-foreground">I understand that these photos will be securely stored and used only for documenting the vehicle condition at the time of rental.</span>
+                </label>
+                <Button className="w-full h-14 text-lg rounded-xl gap-2" onClick={handleSubmit} disabled={!canSubmit || !agreedPrivacy || submitMutation.isPending} data-testid="button-submit-evidence">
+                  {submitMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <UploadCloud className="h-5 w-5" />}
+                  {submitMutation.isPending ? 'Uploading...' : canSubmit ? `Submit Report (${photos.length} photos)` : `${COVERAGE_THRESHOLD - coverage}% more to submit`}
+                </Button>
+                {submitMutation.isError && (
+                  <p className="text-xs text-red-400 text-center mt-2">Upload failed. Please try again.</p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </ScrollArea>
     </div>

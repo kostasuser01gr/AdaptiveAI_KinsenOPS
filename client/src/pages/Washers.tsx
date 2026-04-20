@@ -7,7 +7,9 @@ import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Droplets, CheckCircle2, QrCode, MonitorSmartphone, Loader2, Plus, Users2 } from 'lucide-react';
+import { Droplets, CheckCircle2, QrCode, MonitorSmartphone, Loader2, Plus, Users2, Sparkles, Download } from 'lucide-react';
+import { exportToCsv } from '@/lib/csv';
+import { Empty, EmptyContent, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Badge } from "@/components/ui/badge";
 import { MotionDialog } from "@/components/motion";
 import { Input } from "@/components/ui/input";
@@ -63,11 +65,22 @@ export default function WashersPage() {
       const res = await apiRequest("PATCH", `/api/wash-queue/${id}`, data);
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/wash-queue"] });
+      const previous = queryClient.getQueryData(["/api/wash-queue"]);
+      queryClient.setQueryData(["/api/wash-queue"], (old: any[] | undefined) =>
+        old?.map((item: any) => item.id === id ? { ...item, ...data } : item)
+      );
+      return { previous };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/wash-queue"], context.previous);
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/wash-queue"] });
       toast({ title: "Queue updated" });
     },
-    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
   });
 
   const items = Array.isArray(queue) ? queue : [];
@@ -85,6 +98,11 @@ export default function WashersPage() {
           <Button variant="outline" className="gap-2" onClick={() => window.open('/washer', '_blank')}>
             <MonitorSmartphone className="h-4 w-4" /> Launch Kiosk
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => exportToCsv(items, [
+            { key: 'vehiclePlate', label: 'Plate' }, { key: 'washType', label: 'Type' },
+            { key: 'priority', label: 'Priority' }, { key: 'status', label: 'Status' },
+            { key: 'assignedTo', label: 'Assigned To' }, { key: 'createdAt', label: 'Created' },
+          ], 'wash-queue')} data-testid="button-export-wash"><Download className="h-4 w-4" /> Export</Button>
           <Button className="gap-2" onClick={() => setDialogOpen(true)} data-testid="button-add-wash"><Plus className="h-4 w-4" /> Add to Queue</Button>
           <MotionDialog open={dialogOpen} onOpenChange={setDialogOpen} title="Add to Wash Queue">
               <Form {...washForm}>
@@ -153,16 +171,16 @@ export default function WashersPage() {
                         </div>
                         <div className="flex items-center gap-3">
                           {item.priority === 'Urgent' && <span className="text-xs text-destructive font-medium">{item.slaInfo}</span>}
-                          <span className="text-sm font-medium">{item.assignedTo || 'Unassigned'}</span>
+                          <span className="text-sm font-medium truncate max-w-[120px]">{item.assignedTo || 'Unassigned'}</span>
                           {!item.assignedTo ? (
                             <Button size="sm" disabled={updateMutation.isPending} onClick={() => updateMutation.mutate({ id: item.id, data: { assignedTo: 'Staff', status: 'in_progress' } })} data-testid={`button-assign-${item.id}`}>
-                              Assign
+                              {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}Assign
                             </Button>
                           ) : (
                             <Button size="sm" variant="outline" className="text-green-500 border-green-500/30 hover:bg-green-500/10"
                               disabled={updateMutation.isPending}
                               onClick={() => updateMutation.mutate({ id: item.id, data: { status: 'completed' } })} data-testid={`button-complete-${item.id}`}>
-                              <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Done
+                              {updateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />} Done
                             </Button>
                           )}
                         </div>
@@ -170,10 +188,13 @@ export default function WashersPage() {
                     </Card>
                   ))}
                   {pending.length === 0 && (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Droplets className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                      <p>Queue is clear!</p>
-                    </div>
+                    <Empty className="py-12">
+                      <EmptyContent>
+                        <EmptyMedia variant="icon"><Sparkles className="h-10 w-10" /></EmptyMedia>
+                        <EmptyTitle>Wash queue is clear</EmptyTitle>
+                        <EmptyDescription>All vehicles are clean. New wash jobs will appear here when queued.</EmptyDescription>
+                      </EmptyContent>
+                    </Empty>
                   )}
                 </div>
               )}

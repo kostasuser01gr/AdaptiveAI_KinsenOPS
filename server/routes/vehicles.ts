@@ -6,6 +6,7 @@ import { wsManager } from "../websocket.js";
 import { publicEvidenceLimiter } from "../middleware/rate-limiter.js";
 import { vehiclePatchSchema, evaluateAutomationRules } from "./_helpers.js";
 import { resolveStationScope } from "../middleware/stationScope.js";
+import { cached, invalidate, CacheTTL } from "../cache.js";
 import {
   insertVehicleSchema,
   insertVehicleEvidenceSchema,
@@ -14,7 +15,9 @@ import {
 export function registerVehicleRoutes(app: Express) {
   // VEHICLES CRUD
   app.get("/api/vehicles", requireAuth, async (_req, res, next) => {
-    try { res.json(await storage.getVehicles()); } catch (e) { next(e); }
+    try {
+      res.json(await cached("vehicles:all", CacheTTL.SHORT, () => storage.getVehicles()));
+    } catch (e) { next(e); }
   });
 
   app.get("/api/vehicles/:id", requireAuth, async (req, res, next) => {
@@ -28,6 +31,7 @@ export function registerVehicleRoutes(app: Express) {
   app.post("/api/vehicles", requireRole("admin", "supervisor"), async (req, res, next) => {
     try {
       const v = await storage.createVehicle(insertVehicleSchema.parse(req.body));
+      await invalidate("vehicles:*", "dashboard-stats", "analytics:*");
       wsManager.broadcast({ type: 'vehicle:created', data: v, channel: 'vehicles' });
       res.status(201).json(v);
     } catch (e) { next(e); }
@@ -37,6 +41,7 @@ export function registerVehicleRoutes(app: Express) {
     try {
       const v = await storage.updateVehicle(Number(req.params.id), vehiclePatchSchema.parse(req.body));
       if (!v) return res.status(404).json({ message: "Not found" });
+      await invalidate("vehicles:*", "dashboard-stats", "analytics:*");
       wsManager.broadcast({ type: 'vehicle:updated', data: v, channel: 'vehicles' });
       evaluateAutomationRules('vehicle_status_change', { vehicleId: v.id, status: v.status });
       res.json(v);
@@ -46,6 +51,7 @@ export function registerVehicleRoutes(app: Express) {
   app.delete("/api/vehicles/:id", requireRole("admin"), async (req, res, next) => {
     try {
       await storage.deleteVehicle(Number(req.params.id));
+      await invalidate("vehicles:*", "dashboard-stats", "analytics:*");
       wsManager.broadcast({ type: 'vehicle:deleted', data: { id: Number(req.params.id) }, channel: 'vehicles' });
       res.status(204).end();
     } catch (e) { next(e); }

@@ -7,7 +7,12 @@ import { apiRequest } from '@/lib/queryClient';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, Car, Clock, AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Plus, Trash2, RotateCcw, Eye, TrendingUp, Activity, Wrench, MapPin, Brain, ArrowRightLeft, ParkingSquare, Send, HeartPulse } from 'lucide-react';
+import { Search, Car, Clock, AlertTriangle, CheckCircle2, ShieldAlert, Loader2, Plus, Trash2, RotateCcw, Eye, TrendingUp, Activity, Wrench, MapPin, Brain, ArrowRightLeft, ParkingSquare, Send, HeartPulse, PackageOpen, Download, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { exportToCsv } from '@/lib/csv';
+import { useSearchParam } from '@/hooks/useSearchParam';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { Empty, EmptyContent, EmptyMedia, EmptyTitle, EmptyDescription } from '@/components/ui/empty';
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +22,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { useAuth } from "@/lib/useAuth";
 import { AnimatedList, AnimatedListItem, MotionDialog } from '@/components/motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
@@ -97,7 +103,7 @@ export default function FleetPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = React.useState('');
-  const [statusFilter, setStatusFilter] = React.useState('all');
+  const [statusFilter, setStatusFilter] = useSearchParam('status', 'all');
   const [selectedVehicleId, setSelectedVehicleId] = React.useState<number | null>(null);
   const [newVehicle, setNewVehicle] = React.useState({ plate: '', model: '', category: 'B', status: 'ready', sla: 'normal', nextBooking: '', timerInfo: '-' });
   const vehicleForm = useForm<AddVehicleValues>({
@@ -105,6 +111,13 @@ export default function FleetPage() {
     defaultValues: { plate: '', model: '', category: 'B', status: 'ready', sla: 'normal' },
   });
   const [dialogOpen, setDialogOpen] = React.useState(false);
+  const [archiveTarget, setArchiveTarget] = React.useState<{ id: number; plate: string } | null>(null);
+  const [sortCol, setSortCol] = React.useState<string>('plate');
+  const [sortDir, setSortDir] = React.useState<'asc' | 'desc'>('asc');
+  const toggleSort = (col: string) => {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  };
   const canDelete = user && ['admin', 'coordinator', 'supervisor'].includes(user.role);
 
   // Per-user column visibility (persisted via layout preferences)
@@ -119,7 +132,7 @@ export default function FleetPage() {
     if (next.length > 0) setFleetLayout('columns', next);
   };
 
-  const { data: vehicles, isLoading } = useQuery<Vehicle[]>({ queryKey: ["/api/vehicles"] });
+  const { data: vehicles, isLoading, dataUpdatedAt } = useQuery<Vehicle[]>({ queryKey: ["/api/vehicles"] });
   const allVehicles = Array.isArray(vehicles) ? vehicles : [];
   const selectedVehicle = allVehicles.find(v => v.id === selectedVehicleId) ?? null;
   const { data: stations } = useQuery<Array<{ id: number; name: string }>>({ queryKey: ["/api/stations"], staleTime: 60_000 });
@@ -130,16 +143,54 @@ export default function FleetPage() {
     onError: (err: Error) => { toast({ title: "Error", description: err.message, variant: "destructive" }); },
   });
 
+  const restoreVehicleMutation = useMutation({
+    mutationFn: async (vehicle: any) => { await apiRequest("POST", "/api/vehicles", vehicle); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }); toast({ title: "Vehicle restored" }); },
+    onError: (err: Error) => toast({ title: "Restore failed", description: err.message, variant: "destructive" }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/vehicles/${id}`); },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }); toast({ title: "Vehicle archived" }); setSelectedVehicleId(null); },
-    onError: (err: Error) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/vehicles"] });
+      const previous = queryClient.getQueryData(["/api/vehicles"]);
+      const deleted = (previous as any[])?.find((v: any) => v.id === id);
+      queryClient.setQueryData(["/api/vehicles"], (old: any[] | undefined) =>
+        old?.filter((v: any) => v.id !== id)
+      );
+      setSelectedVehicleId(null);
+      return { previous, deleted };
+    },
+    onError: (err: Error, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/vehicles"], context.previous);
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    },
+    onSuccess: (_data, _id, context) => {
+      const v = context?.deleted;
+      toast({
+        title: "Vehicle archived",
+        description: v?.plate ? `${v.plate} removed from fleet` : undefined,
+        action: v ? <ToastAction altText="Undo archive" onClick={() => restoreVehicleMutation.mutate({ plate: v.plate, model: v.model, category: v.category, status: v.status, sla: v.sla })}>Undo</ToastAction> : undefined,
+      });
+    },
+    onSettled: () => { queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }); },
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: any }) => { const res = await apiRequest("PATCH", `/api/vehicles/${id}`, data); return res.json(); },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }),
-    onError: (err: Error) => toast({ title: "Update failed", description: err.message, variant: "destructive" }),
+    onMutate: async ({ id, data }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/vehicles"] });
+      const previous = queryClient.getQueryData(["/api/vehicles"]);
+      queryClient.setQueryData(["/api/vehicles"], (old: any[] | undefined) =>
+        old?.map((v: any) => v.id === id ? { ...v, ...data } : v)
+      );
+      return { previous };
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/vehicles"], context.previous);
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] }),
   });
 
   const washQueueMutation = useMutation({
@@ -179,10 +230,24 @@ export default function FleetPage() {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  const debouncedSearch = useDebouncedValue(search, 200);
   const filtered = allVehicles.filter(v => {
-    const matchSearch = v.plate.toLowerCase().includes(search.toLowerCase()) || v.model.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = v.plate.toLowerCase().includes(debouncedSearch.toLowerCase()) || v.model.toLowerCase().includes(debouncedSearch.toLowerCase());
     const matchStatus = statusFilter === 'all' || v.status === statusFilter;
     return matchSearch && matchStatus;
+  }).sort((a, b) => {
+    const val = (v: any) => {
+      if (sortCol === 'plate') return v.plate;
+      if (sortCol === 'cat') return v.category;
+      if (sortCol === 'status') return v.status;
+      if (sortCol === 'sla') return v.sla;
+      if (sortCol === 'mileage') return v.mileage ?? 0;
+      if (sortCol === 'fuel') return v.fuelLevel ?? 0;
+      return v.plate;
+    };
+    const av = val(a), bv = val(b);
+    const cmp = typeof av === 'number' ? av - (bv as number) : String(av).localeCompare(String(bv));
+    return sortDir === 'asc' ? cmp : -cmp;
   });
 
   // Virtual scrolling for large fleet tables
@@ -207,7 +272,7 @@ export default function FleetPage() {
   const categoryCount = allVehicles.reduce((acc, v) => { acc[v.category] = (acc[v.category] || 0) + 1; return acc; }, {} as Record<string, number>);
   const statusColors: Record<string, string> = { ready: 'bg-green-500/20 text-green-400', washing: 'bg-blue-500/20 text-blue-400', maintenance: 'bg-yellow-500/20 text-yellow-400', returned: 'bg-purple-500/20 text-purple-400', rented: 'bg-cyan-500/20 text-cyan-400' };
 
-  const [mainTab, setMainTab] = React.useState('overview');
+  const [mainTab, setMainTab] = useSearchParam('tab', 'overview');
 
   return (
     <div className="flex flex-col h-full bg-background relative overflow-hidden">
@@ -216,7 +281,7 @@ export default function FleetPage() {
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2" data-testid="text-page-title">
             <Car className="h-5 w-5 text-primary" /> Fleet Intelligence
           </h1>
-          <p className="text-sm text-muted-foreground">Predictive readiness, vehicle memory, damage clustering, and lifecycle management</p>
+          <p className="text-sm text-muted-foreground">Predictive readiness, vehicle memory, damage clustering, and lifecycle management{dataUpdatedAt > 0 && <span className="ml-2 text-muted-foreground/50">· Updated {new Date(dataUpdatedAt).toLocaleTimeString()}</span>}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2 text-destructive border-destructive/50 hover:bg-destructive/10"
@@ -228,13 +293,18 @@ export default function FleetPage() {
             data-testid="button-log-incident">
             <ShieldAlert className="h-4 w-4" /> Log Incident
           </Button>
+          <Button variant="outline" className="gap-2" onClick={() => exportToCsv(allVehicles, [
+            { key: 'plate', label: 'Plate' }, { key: 'model', label: 'Model' },
+            { key: 'category', label: 'Category' }, { key: 'status', label: 'Status' },
+            { key: 'sla', label: 'SLA' }, { key: 'fuelLevel', label: 'Fuel %' }, { key: 'mileage', label: 'Mileage' },
+          ], 'fleet')} data-testid="button-export-fleet"><Download className="h-4 w-4" /> Export</Button>
           <Button className="gap-2" onClick={() => setDialogOpen(true)} data-testid="button-add-vehicle"><Plus className="h-4 w-4" /> Add Vehicle</Button>
           <MotionDialog open={dialogOpen} onOpenChange={setDialogOpen} title="Add New Vehicle" description="Register a new vehicle to the fleet.">
               <Form {...vehicleForm}>
               <form onSubmit={vehicleForm.handleSubmit((values) => createMutation.mutate({ ...values, plate: values.plate.toUpperCase() }))} className="space-y-4 mt-2">
                 <div className="grid grid-cols-2 gap-3">
                   <FormField control={vehicleForm.control} name="plate" render={({ field }) => (
-                    <FormItem><FormLabel>License Plate</FormLabel><FormControl><Input {...field} onChange={e => field.onChange(e.target.value.toUpperCase())} data-testid="input-vehicle-plate" /></FormControl><FormMessage /></FormItem>
+                    <FormItem><FormLabel>License Plate</FormLabel><FormControl><Input {...field} onChange={e => field.onChange(e.target.value.toUpperCase())} data-testid="input-vehicle-plate" autoFocus /></FormControl><FormMessage /></FormItem>
                   )} />
                   <FormField control={vehicleForm.control} name="model" render={({ field }) => (
                     <FormItem><FormLabel>Model</FormLabel><FormControl><Input {...field} data-testid="input-vehicle-model" /></FormControl><FormMessage /></FormItem>
@@ -283,10 +353,10 @@ export default function FleetPage() {
         </div>
         <TabsContent value="overview" className="flex-1 overflow-hidden mt-0">
       <div className="flex flex-1 overflow-hidden">
-        <div className={`flex-1 flex flex-col ${selectedVehicle ? 'w-[60%]' : 'w-full'}`}>
+        <div className={`flex-1 flex flex-col ${selectedVehicle ? 'sm:w-[60%]' : 'w-full'}`}>
           <ScrollArea className="flex-1 content-visibility-auto">
             <div className="p-4 md:p-6 space-y-6">
-              <AnimatedList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+              <AnimatedList className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
                 {[
                   { label: 'Total', value: stats.total, icon: Car, color: 'text-foreground' },
                   { label: 'Ready', value: stats.ready, icon: CheckCircle2, color: 'text-green-400' },
@@ -364,7 +434,7 @@ export default function FleetPage() {
                       </div>
                       <Popover>
                         <PopoverTrigger asChild>
-                          <Button variant="outline" size="icon" className="h-9 w-9" data-testid="button-column-settings">
+                          <Button variant="outline" size="icon" className="h-9 w-9" aria-label="Configure visible columns" data-testid="button-column-settings">
                             <Settings2 className="h-4 w-4" />
                           </Button>
                         </PopoverTrigger>
@@ -385,16 +455,16 @@ export default function FleetPage() {
                   {isLoading ? (
                     <TableSkeleton rows={6} columns={5} />
                   ) : (
-                    <div ref={tableContainerRef} className="max-h-[60vh] overflow-auto">
-                    <Table>
+                    <div ref={tableContainerRef} className="max-h-[60vh] overflow-auto overflow-x-auto">
+                    <Table className="min-w-[700px]">
                       <TableHeader>
                         <TableRow className="hover:bg-transparent">
-                          {isColVisible('vehicle') && <TableHead>Vehicle</TableHead>}
-                          {isColVisible('cat') && <TableHead>Cat</TableHead>}
-                          {isColVisible('status') && <TableHead>Status</TableHead>}
-                          {isColVisible('sla') && <TableHead>SLA</TableHead>}
-                          {isColVisible('mileage') && <TableHead>Mileage</TableHead>}
-                          {isColVisible('fuel') && <TableHead>Fuel</TableHead>}
+                          {isColVisible('vehicle') && <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('plate')}><div className="flex items-center gap-1">Vehicle {sortCol === 'plate' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>}
+                          {isColVisible('cat') && <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('cat')}><div className="flex items-center gap-1">Cat {sortCol === 'cat' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>}
+                          {isColVisible('status') && <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('status')}><div className="flex items-center gap-1">Status {sortCol === 'status' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>}
+                          {isColVisible('sla') && <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('sla')}><div className="flex items-center gap-1">SLA {sortCol === 'sla' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>}
+                          {isColVisible('mileage') && <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('mileage')}><div className="flex items-center gap-1">Mileage {sortCol === 'mileage' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>}
+                          {isColVisible('fuel') && <TableHead className="cursor-pointer select-none" onClick={() => toggleSort('fuel')}><div className="flex items-center gap-1">Fuel {sortCol === 'fuel' ? (sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/40" />}</div></TableHead>}
                           {isColVisible('nextBooking') && <TableHead>Next Booking</TableHead>}
                           {isColVisible('actions') && <TableHead className="text-right">Actions</TableHead>}
                         </TableRow>
@@ -434,11 +504,11 @@ export default function FleetPage() {
                             {isColVisible('nextBooking') && <TableCell className="text-sm">{v.nextBooking || '—'}</TableCell>}
                             {isColVisible('actions') && <TableCell className="text-right">
                               <div className="flex justify-end gap-1">
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); setSelectedVehicleId(v.id); }} data-testid={`button-view-${v.id}`}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`View details for ${v.plate}`} onClick={(e) => { e.stopPropagation(); setSelectedVehicleId(v.id); }} data-testid={`button-view-${v.id}`}>
                                   <Eye className="h-3.5 w-3.5" />
                                 </Button>
                                 {canDelete && (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" disabled={deleteMutation.isPending} onClick={(e) => { e.stopPropagation(); if (window.confirm(`Archive vehicle ${v.plate}?`)) deleteMutation.mutate(v.id); }} data-testid={`button-delete-${v.id}`}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" aria-label={`Archive vehicle ${v.plate}`} disabled={deleteMutation.isPending} onClick={(e) => { e.stopPropagation(); setArchiveTarget({ id: v.id, plate: v.plate }); }} data-testid={`button-delete-${v.id}`}>
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 )}
@@ -453,7 +523,17 @@ export default function FleetPage() {
                           </>
                         )}
                         {filtered.length === 0 && (
-                          <TableRow><TableCell colSpan={visibleColumns.length} className="text-center py-8 text-muted-foreground">{search ? 'No vehicles match' : 'No vehicles yet'}</TableCell></TableRow>
+                          <TableRow>
+                            <TableCell colSpan={visibleColumns.length}>
+                              <Empty className="py-12">
+                                <EmptyContent>
+                                  <EmptyMedia variant="icon"><PackageOpen className="h-10 w-10" /></EmptyMedia>
+                                  <EmptyTitle>{search ? 'No vehicles match your search' : 'No vehicles in your fleet yet'}</EmptyTitle>
+                                  <EmptyDescription>{search ? 'Try adjusting your search or filters.' : 'Add your first vehicle to get started with fleet management.'}</EmptyDescription>
+                                </EmptyContent>
+                              </Empty>
+                            </TableCell>
+                          </TableRow>
                         )}
                       </TableBody>
                     </Table>
@@ -469,8 +549,8 @@ export default function FleetPage() {
           <div className="w-full sm:w-[340px] absolute inset-0 sm:relative sm:inset-auto border-l flex flex-col bg-card z-10 sm:z-auto">
             <div className="p-4 border-b flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-lg font-mono">{selectedVehicle.plate}</h3>
-                <p className="text-xs text-muted-foreground">{selectedVehicle.model} · Cat {selectedVehicle.category}</p>
+                <h3 className="font-bold text-lg font-mono truncate max-w-[200px]">{selectedVehicle.plate}</h3>
+                <p className="text-xs text-muted-foreground truncate max-w-[200px]">{selectedVehicle.model} · Cat {selectedVehicle.category}</p>
               </div>
               <Button variant="ghost" size="sm" onClick={() => setSelectedVehicleId(null)}>×</Button>
             </div>
@@ -502,7 +582,7 @@ export default function FleetPage() {
                   </Button>
                   {canDelete && (
                     <Button variant="outline" className="w-full justify-start gap-2 h-9 text-xs text-destructive border-destructive/30" disabled={deleteMutation.isPending} onClick={() => deleteMutation.mutate(selectedVehicle.id)} data-testid="button-action-archive">
-                      <Trash2 className="h-3 w-3" /> Archive Vehicle
+                      {deleteMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />} Archive Vehicle
                     </Button>
                   )}
                 </TabsContent>
@@ -528,6 +608,14 @@ export default function FleetPage() {
           <FleetHealthPanel vehicles={allVehicles} stations={Array.isArray(stations) ? stations : []} />
         </TabsContent>
       </Tabs>
+      <ConfirmDialog
+        open={!!archiveTarget}
+        onOpenChange={(open) => { if (!open) setArchiveTarget(null); }}
+        title={`Archive vehicle ${archiveTarget?.plate || ''}?`}
+        description="This will remove the vehicle from the active fleet. You can restore it later from the archive."
+        confirmLabel="Archive"
+        onConfirm={() => { if (archiveTarget) { deleteMutation.mutate(archiveTarget.id); setArchiveTarget(null); } }}
+      />
     </div>
   );
 }
@@ -776,11 +864,11 @@ function PositionsPanel({ stations }: { stations: Array<{ id: number; name: stri
       </Card>
 
       <Card className="glass-panel">
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
             <TableSkeleton rows={5} columns={5} />
           ) : (
-            <Table>
+            <Table className="min-w-[500px]">
               <TableHeader>
                 <TableRow><TableHead>Label</TableHead><TableHead>Type</TableHead><TableHead>Zone</TableHead><TableHead>Station</TableHead><TableHead>Status</TableHead></TableRow>
               </TableHeader>
@@ -867,11 +955,11 @@ function TransfersPanel({ stations }: { stations: Array<{ id: number; name: stri
       </div>
 
       <Card className="glass-panel">
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
             <TableSkeleton rows={4} columns={6} />
           ) : (
-            <Table>
+            <Table className="min-w-[600px]">
               <TableHeader>
                 <TableRow><TableHead>Vehicle</TableHead><TableHead>From</TableHead><TableHead>To</TableHead><TableHead>Status</TableHead><TableHead>Requested</TableHead><TableHead className="text-right">Actions</TableHead></TableRow>
               </TableHeader>

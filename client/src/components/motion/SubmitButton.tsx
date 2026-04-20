@@ -39,6 +39,7 @@ export function SubmitButton({
       const timer = setTimeout(() => setShowSuccess(false), 1500);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [isSuccess]);
 
   return (

@@ -11,6 +11,104 @@ import { useAuth } from "@/lib/useAuth";
 import { useEntitlements } from "@/lib/useEntitlements";
 import { LockedFeature } from "@/components/LockedFeature";
 
+// ─── Trust Ledger Component (U-10) ───────────────────────────────────��───────
+function TrustLedger({ auditEntries }: { auditEntries: any[] }) {
+  const [actorFilter, setActorFilter] = React.useState<'all' | 'ai' | 'user'>('all');
+  const [revertedIds, setRevertedIds] = React.useState<Set<number>>(new Set());
+
+  // Categorize entries as AI or user-driven
+  const ledgerEntries = auditEntries.slice(0, 30).map((e: any) => {
+    const isAI = e.action?.includes('ai.') || e.action?.includes('proposal') || e.action?.includes('automate') || e.userId === null;
+    return { ...e, actor: isAI ? 'ai' : 'user', reverted: revertedIds.has(e.id) };
+  });
+
+  const filtered = ledgerEntries.filter(e =>
+    actorFilter === 'all' || e.actor === actorFilter
+  );
+
+  const revert = (id: number) => setRevertedIds(s => new Set([...s, id]));
+
+  const timeAgo = (dateStr: string) => {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Actor</span>
+        {(['all', 'ai', 'user'] as const).map(v => (
+          <button key={v} onClick={() => setActorFilter(v)}
+            className={`px-2.5 py-1 rounded-full text-xs font-mono border transition-colors ${
+              actorFilter === v
+                ? 'bg-primary/10 text-primary border-primary/30'
+                : 'border-border text-muted-foreground hover:bg-muted'
+            }`}>
+            {v === 'all' ? 'All' : v === 'ai' ? 'AI' : 'User'}
+          </button>
+        ))}
+        <div className="flex-1" />
+        <Badge variant="outline" className="text-xs font-mono">{filtered.length} entries</Badge>
+      </div>
+
+      {filtered.length === 0 ? (
+        <Card className="p-8 text-center border-dashed">
+          <Shield className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-20" />
+          <p className="text-sm text-muted-foreground">No ledger entries yet. AI and user actions will appear here as a timeline.</p>
+        </Card>
+      ) : (
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            {filtered.map((entry: any, i: number) => (
+              <div key={entry.id}
+                className={`grid grid-cols-[80px_36px_1fr_auto] items-center gap-3 px-4 py-3 ${
+                  i > 0 ? 'border-t' : ''
+                } ${entry.reverted ? 'opacity-50' : ''}`}>
+                <div className="text-[11px] font-mono text-muted-foreground">
+                  {timeAgo(entry.createdAt)}
+                </div>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-mono border ${
+                  entry.actor === 'ai'
+                    ? 'bg-primary/10 text-primary border-primary/20'
+                    : 'bg-muted text-muted-foreground border-border'
+                }`}>
+                  {entry.actor === 'ai' ? '◆' : (entry.userId ? `U${entry.userId}` : '?')}
+                </div>
+                <div className="min-w-0">
+                  <div className="text-sm flex items-center gap-2 flex-wrap">
+                    <span>{entry.action}</span>
+                    {entry.entityType && <Badge variant="outline" className="text-[9px]">{entry.entityType}</Badge>}
+                    {entry.reverted && <span className="text-destructive text-[10px] font-mono">· reverted</span>}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                    {entry.id && `#${entry.id}`}
+                    {entry.userId && ` · User #${entry.userId}`}
+                    {entry.ipAddress && ` · ${entry.ipAddress}`}
+                  </div>
+                </div>
+                <div>
+                  {!entry.reverted ? (
+                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => revert(entry.id)}>
+                      Revert
+                    </Button>
+                  ) : (
+                    <span className="text-[11px] text-muted-foreground font-mono">—</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function TrustConsolePage() {
   const { user } = useAuth();
   const { hasFeature } = useEntitlements();
@@ -57,8 +155,9 @@ export default function TrustConsolePage() {
             <Card className="glass-panel"><CardContent className="p-4 text-center"><AlertTriangle className="h-5 w-5 text-yellow-400 mx-auto mb-1" /><p className="text-lg font-bold">0</p><p className="text-[10px] text-muted-foreground">Anomalies</p></CardContent></Card>
           </div>
 
-          <Tabs defaultValue="audit">
+          <Tabs defaultValue="ledger">
             <TabsList>
+              <TabsTrigger value="ledger" data-testid="tab-ledger">Trust Ledger</TabsTrigger>
               <TabsTrigger value="audit" data-testid="tab-audit">Audit Trail</TabsTrigger>
               <TabsTrigger value="privacy" data-testid="tab-privacy">Privacy Zones</TabsTrigger>
               <TabsTrigger value="access" data-testid="tab-access">Access Control</TabsTrigger>
@@ -66,6 +165,10 @@ export default function TrustConsolePage() {
               <TabsTrigger value="retention" data-testid="tab-retention">Data Retention</TabsTrigger>
               <TabsTrigger value="anomalies" data-testid="tab-anomalies">Anomaly Detection</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="ledger" className="mt-4">
+              <TrustLedger auditEntries={auditEntries} />
+            </TabsContent>
 
             <TabsContent value="audit" className="mt-4 space-y-3">
               <div className="flex items-center gap-2 mb-3">

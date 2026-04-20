@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
+import { AnomalyCards, deriveAnomalies } from '@/components/imports/AnomalyCards';
 
 interface ImportRecord {
   id: number;
@@ -221,6 +222,21 @@ export default function ImportsPage() {
             </TabsList>
 
             <TabsContent value="active" className="mt-4 space-y-4">
+              {/* U-08: Import Anomaly Cards — pre-triaged stack after each import */}
+              {(() => {
+                const withConflicts = activeImports.filter(i => i.diffs && (i.diffs.conflicts > 0 || i.diffs.added > 20 || i.diffs.updated > 0));
+                const anomalies = withConflicts.length > 0 ? deriveAnomalies(withConflicts[0].diffs) : [];
+                return anomalies.length > 0 ? (
+                  <div className="mb-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Brain className="h-4 w-4 text-primary" />
+                      <h3 className="text-sm font-semibold">AI-Triaged Anomalies</h3>
+                      <Badge variant="outline" className="text-[10px] font-mono">{anomalies.length} issues</Badge>
+                    </div>
+                    <AnomalyCards importId={withConflicts[0].id} anomalies={anomalies} />
+                  </div>
+                ) : null;
+              })()}
               {activeImports.length > 0 ? activeImports.map(imp => (
                 <ImportCard key={imp.id} data={imp} onSelect={() => setSelectedImport(imp)} onDiff={() => { setSelectedImport(imp); setShowDiffView(true); }} onDiscard={() => discardImportMutation.mutate(imp.id)} />
               )) : (

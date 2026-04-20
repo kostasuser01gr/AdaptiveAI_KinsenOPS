@@ -14,10 +14,15 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SlidePanel } from '@/components/motion/SlidePanel';
+import { useOnboardingTour } from '@/hooks/useOnboardingTour';
+import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { PageBreadcrumbBar } from './PageBreadcrumb';
 import { CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { formatRelative } from '@/lib/formatDate';
 
 const IconMap: Record<string, React.ReactNode> = {
   'Clock': <Clock className="h-3.5 w-3.5" />,
@@ -40,6 +45,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const [cmdOpen, setCmdOpen] = React.useState(false);
   const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const { startTour } = useOnboardingTour();
+  useDocumentTitle();
+  const { status: wsStatus } = useWebSocket();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   useEffect(() => {
@@ -107,33 +116,90 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   const markReadMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("PATCH", `/api/notifications/${id}/read`); },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() }),
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.notifications.all() });
+      const previous = queryClient.getQueryData(queryKeys.notifications.all());
+      queryClient.setQueryData(queryKeys.notifications.all(), (old: any[] | undefined) =>
+        old?.map((n: any) => n.id === id ? { ...n, read: true } : n)
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKeys.notifications.all(), context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() }),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: async () => { await apiRequest("POST", "/api/notifications/read-all"); },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.notifications.all() });
+      const previous = queryClient.getQueryData(queryKeys.notifications.all());
+      queryClient.setQueryData(queryKeys.notifications.all(), (old: any[] | undefined) =>
+        old?.map((n: any) => ({ ...n, read: true }))
+      );
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKeys.notifications.all(), context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all() }),
   });
 
   const deleteActionMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/custom-actions/${id}`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/custom-actions"] });
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/custom-actions"] });
+      const previous = queryClient.getQueryData(["/api/custom-actions"]);
+      queryClient.setQueryData(["/api/custom-actions"], (old: any[] | undefined) =>
+        old?.filter((a: any) => a.id !== id)
+      );
+      return { previous };
     },
+    onError: (_err, _id, context) => {
+      if (context?.previous) queryClient.setQueryData(["/api/custom-actions"], context.previous);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["/api/custom-actions"] }),
   });
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) {
+        // Only handle Cmd+K even in inputs
+        if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          setCmdOpen((open) => !open);
+        }
+        return;
+      }
+
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         setCmdOpen((open) => !open);
+      } else if (e.key === "j" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        navigate('/');
+      } else if (e.key === "n" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+        e.preventDefault();
+        navigate('/fleet');
+      } else if (e.key === "i" && (e.metaKey || e.ctrlKey) && e.shiftKey) {
+        e.preventDefault();
+        navigate('/inbox');
+      } else if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setShortcutsOpen(o => !o);
+      } else if (e.key === "Escape") {
+        if (shortcutsOpen) setShortcutsOpen(false);
+        else if (notifOpen) setNotifOpen(false);
       }
     };
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, []);
+  }, [navigate, notifOpen, shortcutsOpen]);
 
   const toggleVoice = () => {
     if (voiceMode === 'idle') {
@@ -185,7 +251,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     Mark all read
                   </Button>
                 )}
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setNotifOpen(false)}>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setNotifOpen(false)} aria-label="Close notifications">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -207,7 +273,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                           {!n.read && <div className="h-2 w-2 rounded-full bg-primary shrink-0" />}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
-                        <span className="text-[10px] text-muted-foreground/60 mt-1 block">{new Date(n.createdAt).toLocaleString()}</span>
+                        <span className="text-[10px] text-muted-foreground/60 mt-1 block">{formatRelative(n.createdAt)}</span>
                       </div>
                     </div>
                   </div>
@@ -268,7 +334,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             </div>
           </div>
 
-          <div className="flex items-center gap-2 ml-4">
+          <div className="flex items-center gap-1 sm:gap-2 ml-2 sm:ml-4 shrink-0">
             {customActions.map(action => (
               <Tooltip key={action.id}>
                 <TooltipTrigger asChild>
@@ -315,19 +381,20 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center justify-center h-9 w-9 rounded-full hover:bg-muted cursor-pointer transition-colors ml-1">
-                  <div className="flex h-2 w-2 rounded-full bg-green-500 ring-2 ring-background animate-pulse" />
+                  <div className={`flex h-2 w-2 rounded-full ring-2 ring-background ${wsStatus === 'connected' ? 'bg-green-500 animate-pulse' : wsStatus === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`} />
                 </div>
               </TooltipTrigger>
               <TooltipContent>
                 <div className="text-xs">
-                  <p className="font-semibold mb-1">{t('app_health')}: Operational</p>
-                  <p className="text-muted-foreground">All systems running</p>
+                  <p className="font-semibold mb-1">{t('app_health')}: {wsStatus === 'connected' ? 'Connected' : wsStatus === 'connecting' ? 'Reconnecting…' : 'Disconnected'}</p>
+                  <p className="text-muted-foreground">{wsStatus === 'connected' ? 'Real-time updates active' : wsStatus === 'connecting' ? 'Attempting to reconnect' : 'Updates paused — reconnecting shortly'}</p>
                 </div>
               </TooltipContent>
             </Tooltip>
           </div>
         </header>
 
+        <PageBreadcrumbBar />
         <div className="flex-1 overflow-hidden relative">{children}</div>
       </main>
 
@@ -447,10 +514,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             <CommandItem onSelect={() => navTracked('/workspace-memory', 'Teach AI')}>Teach AI a new rule</CommandItem>
           </CommandGroup>
           <CommandGroup heading="Operations">
-            <CommandItem onSelect={() => nav('/fleet')}><Car className="mr-2 h-4 w-4" />Fleet Intelligence</CommandItem>
+            <CommandItem onSelect={() => nav('/fleet')}>
+              <Car className="mr-2 h-4 w-4" />Fleet Intelligence
+              <kbd className="ml-auto text-[10px] text-muted-foreground font-mono">⌘⇧N</kbd>
+            </CommandItem>
             <CommandItem onSelect={() => nav('/washers')}><Droplets className="mr-2 h-4 w-4" />Washer Queue</CommandItem>
             <CommandItem onSelect={() => nav('/shifts')}><CalendarDays className="mr-2 h-4 w-4" />Shift Management</CommandItem>
-            <CommandItem onSelect={() => nav('/inbox')}><Inbox className="mr-2 h-4 w-4" />Operations Inbox</CommandItem>
+            <CommandItem onSelect={() => nav('/inbox')}>
+              <Inbox className="mr-2 h-4 w-4" />Operations Inbox
+              <kbd className="ml-auto text-[10px] text-muted-foreground font-mono">⌘⇧I</kbd>
+            </CommandItem>
             <CommandItem onSelect={() => nav('/vehicle-intelligence')}><Eye className="mr-2 h-4 w-4" />Vehicle Intelligence</CommandItem>
             <CommandItem onSelect={() => nav('/analytics')}><BarChart3 className="mr-2 h-4 w-4" />Analytics & Reports</CommandItem>
           </CommandGroup>
@@ -475,9 +548,39 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <CommandGroup heading="Settings">
             <CommandItem onSelect={() => nav('/settings')}><Settings className="mr-2 h-4 w-4" />Settings & Preferences</CommandItem>
             <CommandItem onSelect={() => nav('/users')}><Users className="mr-2 h-4 w-4" />User Management</CommandItem>
+            <CommandItem onSelect={() => { setCmdOpen(false); setTimeout(startTour, 300); }}><Eye className="mr-2 h-4 w-4" />Restart product tour</CommandItem>
           </CommandGroup>
         </CommandList>
       </CommandDialog>
+
+      {/* Keyboard shortcuts overlay */}
+      {shortcutsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm" onClick={() => setShortcutsOpen(false)}>
+          <div className="bg-card border rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">Keyboard Shortcuts</h3>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShortcutsOpen(false)} aria-label="Close shortcuts">
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="space-y-2 text-sm">
+              {[
+                ['⌘ K', 'Command palette'],
+                ['⌘ J', 'New chat'],
+                ['⌘ ⇧ N', 'Fleet'],
+                ['⌘ ⇧ I', 'Inbox'],
+                ['?', 'This help'],
+                ['Esc', 'Close panel / dialog'],
+              ].map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between py-1.5">
+                  <span className="text-muted-foreground">{label}</span>
+                  <kbd className="inline-flex items-center rounded border bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">{key}</kbd>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

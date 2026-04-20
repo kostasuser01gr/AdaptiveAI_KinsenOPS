@@ -116,7 +116,7 @@ export default function WasherChat() {
 
       <div className="p-3 bg-background border-t shrink-0">
         <div className="flex items-center gap-2 bg-muted/50 rounded-full p-1 pl-3 border focus-within:ring-1 focus-within:ring-primary/50">
-          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full shrink-0 text-muted-foreground">
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full shrink-0 text-muted-foreground" aria-label="Attach file">
             <Paperclip className="h-4 w-4" />
           </Button>
           <input

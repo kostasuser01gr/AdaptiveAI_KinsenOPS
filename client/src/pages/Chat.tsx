@@ -25,6 +25,7 @@ import { useChatSSE } from './chat/useChatSSE';
 import { ChatConversationSidebar } from '@/components/chat/ChatConversationSidebar';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { ChatInput } from '@/components/chat/ChatInput';
+import { FleetPulseStrip } from '@/components/chat/FleetPulseStrip';
 
 function makeWelcomeMessages(displayName?: string): LocalMessage[] {
   return [
@@ -53,6 +54,7 @@ export default function ChatPage() {
   const [showConvSidebar, setShowConvSidebar] = useState(true);
   const [messages, setMessages] = useState<LocalMessage[]>(() => makeWelcomeMessages(user?.displayName));
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const cmdTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // ─── Data queries ───
   const { data: conversations = [] } = useQuery<Array<{ id: number; title: string; createdAt: string }>>({
@@ -128,6 +130,7 @@ export default function ChatPage() {
         setMessages(makeWelcomeMessages(user?.displayName));
       }
     },
+    onError: (err: Error) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const createProposalMutation = useMutation({
@@ -136,6 +139,7 @@ export default function ChatPage() {
       return res.json();
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: queryKeys.proposals.all() }); },
+    onError: (err: Error) => toast({ title: "Proposal failed", description: err.message, variant: "destructive" }),
   });
 
   const applyProposalMutation = useMutation({
@@ -147,6 +151,7 @@ export default function ChatPage() {
       queryClient.invalidateQueries({ queryKey: queryKeys.customActions.all() });
       queryClient.invalidateQueries({ queryKey: queryKeys.proposals.all() });
     },
+    onError: (err: Error) => toast({ title: "Apply failed", description: err.message, variant: "destructive" }),
   });
 
   // ─── Conversation management ───
@@ -504,7 +509,7 @@ export default function ChatPage() {
         setMessages(prev => [...prev, userMsg]);
         setInput('');
         setIsTyping(true);
-        setTimeout(() => cmd.handler(parts.slice(1).join(' ')), 300);
+        cmdTimeoutRef.current = setTimeout(() => cmd.handler(parts.slice(1).join(' ')), 300);
         return;
       }
     }
@@ -531,8 +536,12 @@ export default function ChatPage() {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsTyping(true);
-    setTimeout(() => cmd.handler(args), 300);
+    cmdTimeoutRef.current = setTimeout(() => cmd.handler(args), 300);
   };
+
+  useEffect(() => {
+    return () => { if (cmdTimeoutRef.current) clearTimeout(cmdTimeoutRef.current); };
+  }, []);
 
   // ─── Render ───
   return (
@@ -553,7 +562,7 @@ export default function ChatPage() {
           <div className="flex items-center gap-2">
             {!showConvSidebar && (
               <Tooltip><TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowConvSidebar(true)}>
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Show conversations" onClick={() => setShowConvSidebar(true)}>
                   <PanelLeft className="h-4 w-4" />
                 </Button>
               </TooltipTrigger><TooltipContent>Show conversations</TooltipContent></Tooltip>
@@ -611,6 +620,7 @@ export default function ChatPage() {
           onPinToTab={handlePinToTab}
         />
 
+        <FleetPulseStrip onPillClick={(cmd) => setInput(cmd)} />
         <ChatInput
           input={input}
           setInput={setInput}

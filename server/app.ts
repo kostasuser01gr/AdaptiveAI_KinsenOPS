@@ -5,7 +5,7 @@ import compression from "compression";
 import { createServer, type Server } from "http";
 import { registerRoutes } from "./routes.js";
 import { seedDatabase } from "./seed.js";
-import { logger, requestIdMiddleware } from "./observability/logger.js";
+import { logger, requestIdMiddleware, requestLogMiddleware } from "./observability/logger.js";
 import { getPrometheusMetrics, metricsMiddleware, promRegistry } from "./observability/metrics.js";
 import { initSentry, Sentry } from "./observability/sentry.js";
 import { pool } from "./db.js";
@@ -13,6 +13,7 @@ import { requestTimeout } from "./middleware/timeout.js";
 import { csrfProtection } from "./middleware/csrf.js";
 import { envelopeMiddleware } from "./middleware/envelope.js";
 import { idempotencyGuard } from "./middleware/idempotency.js";
+import { generateOpenApiDocument } from "./openapi.js";
 import { config } from "./config.js";
 
 // Register all agentic tools at import time.
@@ -105,6 +106,7 @@ function configureSecurity(app: Express): void {
 function configureApiMiddleware(app: Express): void {
   app.use(metricsMiddleware);
   app.use(requestIdMiddleware);
+  app.use(requestLogMiddleware);
 
   app.use(
     express.json({
@@ -156,6 +158,22 @@ function registerOperationalRoutes(app: Express): void {
         database: dbOk ? "connected" : "unreachable",
       },
     });
+  });
+
+  // OpenAPI spec endpoint
+  app.get("/api/openapi.json", (_req, res) => {
+    res.json(generateOpenApiDocument());
+  });
+
+  // Scalar API docs UI
+  app.get("/api/docs", (_req, res) => {
+    res.setHeader("Content-Type", "text/html");
+    res.send(`<!DOCTYPE html>
+<html><head><title>AdaptiveAI API Docs</title><meta charset="utf-8" />
+<style>body{margin:0}</style></head><body>
+<script id="api-reference" data-url="/api/openapi.json"></script>
+<script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+</body></html>`);
   });
 
   app.get("/metrics", async (_req, res) => {

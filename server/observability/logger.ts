@@ -64,6 +64,25 @@ class StructuredLogger {
 
 export const logger = new StructuredLogger();
 
+/** Create a child logger that automatically includes requestId in every log line */
+export function childLogger(requestId: string): StructuredLogger & { child: never } {
+  return new Proxy(logger, {
+    get(target, prop) {
+      const fn = target[prop as keyof StructuredLogger];
+      if (typeof fn !== 'function') return fn;
+      return (...args: unknown[]) => {
+        // Inject requestId into the context argument
+        if (prop === 'error') {
+          const [msg, err, ctx] = args as [string, Error?, LogContext?];
+          return target.error(msg, err, { requestId, ...ctx });
+        }
+        const [msg, ctx] = args as [string, LogContext?];
+        return (target[prop as 'info' | 'warn' | 'debug'])(msg, { requestId, ...ctx });
+      };
+    },
+  }) as unknown as StructuredLogger & { child: never };
+}
+
 /**
  * Middleware that assigns a unique request ID to every request.
  * The ID is attached to `res.locals.requestId` and returned in the
@@ -73,5 +92,29 @@ export function requestIdMiddleware(req: Request, res: Response, next: NextFunct
   const id = (req.headers['x-request-id'] as string) || randomUUID();
   res.locals.requestId = id;
   res.setHeader('X-Request-Id', id);
+  next();
+}
+
+/**
+ * Middleware that logs every HTTP request with method, path, status, and duration.
+ * Place after requestIdMiddleware so the request ID is available.
+ */
+export function requestLogMiddleware(req: Request, res: Response, next: NextFunction): void {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const requestId = res.locals.requestId as string | undefined;
+    const userId = (req as unknown as Record<string, unknown>).user
+      ? ((req as unknown as Record<string, unknown>).user as Record<string, unknown>).id as number
+      : undefined;
+    logger.info(`${req.method} ${req.path} ${res.statusCode}`, {
+      requestId,
+      method: req.method,
+      path: req.path,
+      statusCode: res.statusCode,
+      duration,
+      userId,
+    });
+  });
   next();
 }

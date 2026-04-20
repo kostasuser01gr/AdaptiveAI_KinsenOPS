@@ -11,6 +11,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { BarChart3, TrendingUp, TrendingDown, Activity, Car, Droplets, Users, Clock, AlertTriangle, Brain, Download, ArrowRight, Target, Shield, Database, Loader2, Sparkles, ChevronDown, Code2 } from 'lucide-react';
 import { CountUp } from '@/components/motion';
 import { StatCard } from '@/components/StatCard';
+import { useSearchParam } from '@/hooks/useSearchParam';
+import { StatGridSkeleton } from '@/components/skeletons';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useEntitlements } from "@/lib/useEntitlements";
 import { useAuth } from "@/lib/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -119,7 +122,11 @@ function NlQueryPanel() {
             </Collapsible>
 
             {result.rows.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No rows returned.</p>
+              <div className="text-center py-10 text-muted-foreground">
+                <BarChart3 className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                <p className="text-sm font-medium">No rows returned</p>
+                <p className="text-xs mt-1">Try a different query or adjust the time range.</p>
+              </div>
             ) : (
               <div className="overflow-x-auto rounded border border-border/40">
                 <table className="w-full text-xs">
@@ -171,9 +178,10 @@ export default function AnalyticsPage() {
   const { user } = useAuth();
   const canRunNlSql = !!user && ['admin', 'supervisor', 'coordinator'].includes(user.role);
   const [trendDays, setTrendDays] = React.useState(30);
+  const [activeTab, setActiveTab] = useSearchParam('tab', 'operations');
 
-  const { data: vehiclesData } = useQuery({ queryKey: ["/api/vehicles"] });
-  const { data: washData } = useQuery({ queryKey: ["/api/wash-queue"] });
+  const { data: vehiclesData, isLoading: vehiclesLoading, dataUpdatedAt } = useQuery({ queryKey: ["/api/vehicles"] });
+  const { data: washData, isLoading: washLoading } = useQuery({ queryKey: ["/api/wash-queue"] });
   const { data: shiftsData } = useQuery({ queryKey: ["/api/shifts"] });
   const { data: notifsData } = useQuery({ queryKey: ["/api/notifications"] });
   const { data: summaryData } = useQuery({ queryKey: ["/api/analytics/summary"] });
@@ -247,7 +255,7 @@ export default function AnalyticsPage() {
           <h1 className="text-xl font-bold tracking-tight flex items-center gap-2" data-testid="text-page-title">
             <BarChart3 className="h-5 w-5 text-primary" /> Analytics & Reports
           </h1>
-          <p className="text-sm text-muted-foreground">Operational performance, fleet health, team productivity, and AI-driven insights</p>
+          <p className="text-sm text-muted-foreground">Operational performance, fleet health, team productivity, and AI-driven insights{dataUpdatedAt > 0 && <span className="ml-2 text-muted-foreground/50">· Updated {new Date(dataUpdatedAt).toLocaleTimeString()}</span>}</p>
         </div>
         <div className="flex gap-2 items-center">
           <div className="flex gap-1">
@@ -263,6 +271,17 @@ export default function AnalyticsPage() {
       </div>
 
       <ScrollArea className="flex-1">
+        {(vehiclesLoading || washLoading) ? (
+          <div className="p-4 md:p-6 space-y-6">
+            <Skeleton className="h-24 w-full rounded-lg" />
+            <StatGridSkeleton />
+            <Skeleton className="h-10 w-80 rounded-md" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Skeleton className="h-48 rounded-lg" />
+              <Skeleton className="h-48 rounded-lg" />
+            </div>
+          </div>
+        ) : (
         <div className="p-4 md:p-6 space-y-6">
           <Card className="glass-card border-primary/20 bg-primary/5">
             <CardContent className="p-4">
@@ -291,14 +310,14 @@ export default function AnalyticsPage() {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             <StatCard title="Fleet Size" value={totalVehicles} icon={Car} subtitle={`${readyCount} ready · ${fleetAvailability}% available`} trend={{ positive: true, text: `${fleetUtil}% utilized` }} />
             <StatCard title="Active Washes" value={inProgressWashes} icon={Droplets} color="text-blue-400" subtitle={`${pendingWashes} queued · ${washesToday} today`} trend={washSlaAttainment > 0 ? { positive: washSlaAttainment >= 80, text: `${washSlaAttainment}% SLA attainment` } : undefined} />
             <StatCard title="Avg Turnaround" value={avgTurnaround > 0 ? `${avgTurnaround}m` : '—'} icon={Clock} color="text-green-400" subtitle="Wash cycle time" />
             <StatCard title="Open Incidents" value={kpis.open_incidents?.value ?? criticalNotifs} icon={AlertTriangle} color={criticalNotifs > 0 ? "text-red-400" : "text-muted-foreground"} subtitle={`${unreadNotifs} unread`} />
           </div>
 
-          <Tabs defaultValue="operations">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="operations" data-testid="tab-operations">Operations</TabsTrigger>
               <TabsTrigger value="trends" data-testid="tab-trends">Trends</TabsTrigger>
@@ -438,7 +457,7 @@ export default function AnalyticsPage() {
               <Card className="glass-card">
                 <CardHeader className="pb-3"><CardTitle className="text-sm">Period Summary</CardTitle></CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div><p className="text-xs text-muted-foreground">Avg Daily Washes</p><p className="text-xl font-bold">{trends.length > 0 ? (trends.reduce((s, t) => s + t.washes, 0) / trends.length).toFixed(1) : '0'}</p></div>
                     <div><p className="text-xs text-muted-foreground">Peak Day</p><p className="text-xl font-bold">{trends.length > 0 ? trends.reduce((max, t) => t.washes > max.washes ? t : max, trends[0]).date.slice(5) : '—'}</p></div>
                     <div><p className="text-xs text-muted-foreground">Avg Daily Evidence</p><p className="text-xl font-bold">{trends.length > 0 ? (trends.reduce((s, t) => s + t.evidence, 0) / trends.length).toFixed(1) : '0'}</p></div>
@@ -605,6 +624,7 @@ export default function AnalyticsPage() {
             )}
           </Tabs>
         </div>
+        )}
       </ScrollArea>
     </div>
   );
