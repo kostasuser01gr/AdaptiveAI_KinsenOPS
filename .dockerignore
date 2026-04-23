@@ -5,3 +5,11 @@ dist
 .env
 .env.*
 !.env.example
+
+# Security: Secret files (auto-added by Secret Sentinel)
+*.pem
+*.key
+*.p12
+*.pfx
+serviceAccountKey*.json
+firebase-service-account*.json
